@@ -1,0 +1,45 @@
+# Binaries
+/netmon
+/netmon.exe
+/cmd/netmon/netmon
+/cmd/netmon/netmon.exe
+
+# Build output
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# Test binary
+*.test
+
+# Coverage
+*.out
+
+# Database
+*.db
+*.db-shm
+*.db-wal
+
+# Dependency directories
+vendor/
+
+# Go workspace
+go.work
+go.work.sum
+
+# Environment
+.env
+.env.*
+
+# Frontend
+web/node_modules/
+web/dist/
+
+# macOS
+.DS_Store
+
+# IDE
+.idea/
+.vscode/
