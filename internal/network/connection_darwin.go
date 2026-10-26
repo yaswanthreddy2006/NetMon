@@ -4,33 +4,39 @@ package network
 
 import (
 	"encoding/json"
-	"os/exec"
 	"strconv"
 	"strings"
+	"time"
 )
 
 // ConnectionInfo describes the active network connection regardless of type.
 type ConnectionInfo struct {
-	Type     string // "wifi", "ethernet", or ""
-	// WiFi-specific
-	RSSI    int    // signal strength dBm (negative; 0 = unavailable)
-	Noise   int    // noise floor dBm (negative; 0 = unavailable)
-	SNR     int    // signal-to-noise ratio dB (0 = unavailable)
-	Channel int    // WiFi channel number (0 = unavailable)
-	Band    string // "2GHz", "5GHz", "6GHz", or ""
-	// Shared
-	LinkRate int // link rate / speed Mbps (0 = unavailable)
-	// Ethernet-specific
-	Duplex string // "full", "half", or ""
+	Type              string `json:"type"` // "wifi", "ethernet", or ""
+	SSID              string `json:"ssid,omitempty"`
+	BSSID             string `json:"bssid,omitempty"`
+	RSSI              int    `json:"rssi"`               // signal strength dBm (negative; 0 = unavailable)
+	SignalQuality     int    `json:"signal_quality"`      // 0-100 percentage
+	Noise             int    `json:"noise"`              // noise floor dBm (negative; 0 = unavailable)
+	SNR               int    `json:"snr"`                // signal-to-noise ratio dB (0 = unavailable)
+	Channel           int    `json:"channel"`            // WiFi channel number (0 = unavailable)
+	ChannelWidth      string `json:"channel_width,omitempty"`
+	Band              string `json:"band"`               // "2.4GHz", "5GHz", "6GHz", or ""
+	RadioType         string `json:"radio_type,omitempty"`
+	LinkRate          int    `json:"link_rate"`          // Wi-Fi PHY Link Rate / Ethernet Link Speed Mbps (0 = unavailable)
+	Duplex            string `json:"duplex,omitempty"`   // "full", "half", or ""
+	Adapter           string `json:"adapter,omitempty"`
+	Status            string `json:"status"`
+	UnavailableReason string `json:"unavailable_reason,omitempty"`
+	IP                string `json:"ip,omitempty"`
+	Gateway           string `json:"gateway,omitempty"`
 }
 
 // GetConnectionInfo detects the active interface and returns its connection details.
-// It reuses darwinRoute() (defined in network.go) to avoid running route twice.
 func GetConnectionInfo() (ConnectionInfo, bool) {
 	_, activeIface := darwinRoute()
 
 	// Try WiFi via system_profiler
-	if spOut, err := exec.Command("system_profiler", "SPAirPortDataType", "-json").Output(); err == nil {
+	if spOut, err := ExecCommandWithTimeout(5*time.Second, "system_profiler", "SPAirPortDataType", "-json"); err == nil {
 		if info, ok := parseMacWifi(spOut, activeIface); ok {
 			return info, true
 		}
@@ -40,15 +46,20 @@ func GetConnectionInfo() (ConnectionInfo, bool) {
 	if activeIface != "" {
 		return macEthernetInfo(activeIface)
 	}
-	return ConnectionInfo{}, false
+	return ConnectionInfo{
+		Type:              "none",
+		Status:            "disconnected",
+		UnavailableReason: "No active Wi-Fi or Ethernet interface detected",
+	}, false
 }
 
-// spAirPortData is the relevant subset of system_profiler SPAirPortDataType JSON.
 type spAirPortData struct {
 	SPAirPortDataType []struct {
 		Interfaces []struct {
 			Name    string `json:"_name"`
 			Current *struct {
+				SSID        string `json:"spairport_network_name"`
+				BSSID       string `json:"spairport_network_bssid"`
 				Channel     string `json:"spairport_network_channel"`
 				Rate        int    `json:"spairport_network_rate"`
 				SignalNoise string `json:"spairport_signal_noise"`
@@ -57,8 +68,6 @@ type spAirPortData struct {
 	} `json:"SPAirPortDataType"`
 }
 
-// parseMacWifi extracts WiFi stats from system_profiler JSON.
-// If activeIface is non-empty, only the matching interface is considered.
 func parseMacWifi(data []byte, activeIface string) (ConnectionInfo, bool) {
 	var sp spAirPortData
 	if err := json.Unmarshal(data, &sp); err != nil {
@@ -75,8 +84,11 @@ func parseMacWifi(data []byte, activeIface string) (ConnectionInfo, bool) {
 			}
 			var info ConnectionInfo
 			info.Type = "wifi"
+			info.Status = "connected"
+			info.Adapter = iface.Name
+			info.SSID = cur.SSID
+			info.BSSID = cur.BSSID
 
-			// Parse "-24 dBm / -97 dBm"
 			parts := strings.SplitN(cur.SignalNoise, " / ", 2)
 			if len(parts) == 2 {
 				rssi, e1 := strconv.Atoi(strings.TrimSuffix(parts[0], " dBm"))
@@ -85,10 +97,16 @@ func parseMacWifi(data []byte, activeIface string) (ConnectionInfo, bool) {
 					info.RSSI = rssi
 					info.Noise = noise
 					info.SNR = rssi - noise
+					if rssi <= -100 {
+						info.SignalQuality = 0
+					} else if rssi >= -50 {
+						info.SignalQuality = 100
+					} else {
+						info.SignalQuality = 2 * (rssi + 100)
+					}
 				}
 			}
 
-			// Parse "1 (2GHz, 20MHz)"
 			if chParts := strings.SplitN(cur.Channel, " ", 2); len(chParts) >= 1 {
 				info.Channel, _ = strconv.Atoi(chParts[0])
 			}
@@ -98,18 +116,25 @@ func parseMacWifi(data []byte, activeIface string) (ConnectionInfo, bool) {
 			case strings.Contains(cur.Channel, "5GHz"):
 				info.Band = "5GHz"
 			case strings.Contains(cur.Channel, "2GHz"):
-				info.Band = "2GHz"
+				info.Band = "2.4GHz"
+			}
+			if strings.Contains(cur.Channel, "MHz") {
+				fields := strings.Fields(cur.Channel)
+				for _, f := range fields {
+					if strings.HasSuffix(f, "MHz") || strings.HasSuffix(f, "MHz)") {
+						info.ChannelWidth = strings.Trim(f, "()")
+					}
+				}
 			}
 			info.LinkRate = cur.Rate
-			return info, info.RSSI != 0
+			return info, info.RSSI != 0 || info.LinkRate != 0
 		}
 	}
 	return ConnectionInfo{}, false
 }
 
-// macEthernetInfo reads the link speed and duplex from ifconfig for a wired interface.
 func macEthernetInfo(iface string) (ConnectionInfo, bool) {
-	out, err := exec.Command("ifconfig", iface).Output()
+	out, err := ExecCommandWithTimeout(DefaultCommandTimeout, "ifconfig", iface)
 	if err != nil {
 		return ConnectionInfo{}, false
 	}
@@ -118,10 +143,11 @@ func macEthernetInfo(iface string) (ConnectionInfo, bool) {
 		return ConnectionInfo{}, false
 	}
 	info.Type = "ethernet"
+	info.Adapter = iface
+	info.Status = "connected"
 	return info, true
 }
 
-// parseIfconfigMedia parses "media: autoselect (1000baseT <full-duplex>)" lines.
 func parseIfconfigMedia(output string) ConnectionInfo {
 	var info ConnectionInfo
 	for _, line := range strings.Split(output, "\n") {
@@ -134,12 +160,11 @@ func parseIfconfigMedia(output string) ConnectionInfo {
 		if start < 0 || end <= start {
 			break
 		}
-		inner := line[start+1 : end] // e.g. "1000baseT <full-duplex>"
+		inner := line[start+1 : end]
 		fields := strings.Fields(inner)
 		if len(fields) == 0 {
 			break
 		}
-		// Extract leading digits from "1000baseT" → 1000
 		speedStr := fields[0]
 		nonDigit := strings.IndexFunc(speedStr, func(r rune) bool { return r < '0' || r > '9' })
 		if nonDigit > 0 {

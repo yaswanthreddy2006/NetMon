@@ -32,6 +32,21 @@ go.work.sum
 # Environment
 .env
 .env.*
+.envrc
+*.local
+config.local.json
+
+# Local logs and temporary files
+*.log
+*.tmp
+*.temp
+*.swp
+
+# Private keys and certificates
+*.pem
+*.key
+*.p12
+*.pfx
 
 # Frontend
 web/node_modules/

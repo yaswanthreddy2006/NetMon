@@ -12,49 +12,72 @@
       </span>
     </template>
 
-    <!-- No data -->
+    <!-- No data / Disconnected -->
     <div v-if="!conn" class="card-empty">
       <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="16" y="16" width="6" height="6" rx="1"/><rect x="2" y="16" width="6" height="6" rx="1"/><rect x="9" y="2" width="6" height="6" rx="1"/><path d="M5 16v-3a1 1 0 0 1 1-1h12a1 1 0 0 1 1 1v3"/><path d="M12 12V8"/></svg>
-      <span>No connection data</span>
+      <span>No active connection</span>
     </div>
 
     <!-- WiFi details -->
     <div v-else-if="type === 'wifi'" class="flex flex-col gap-1.5">
       <div class="card-row">
+        <span class="card-row-label">SSID / Network</span>
+        <span class="card-row-value font-bold text-cyan-400">{{ ssidName }}</span>
+      </div>
+      <div class="card-row">
+        <span class="card-row-label">Radio Protocol</span>
+        <span class="card-row-value font-mono">{{ radioStandard }}</span>
+      </div>
+      <div class="card-row">
         <span class="card-row-label">Signal (RSSI)</span>
-        <span class="card-row-value" :style="{ color: signalColor }">{{ rssi }} dBm</span>
+        <span class="card-row-value" :style="{ color: signalColor }">{{ rssi ? rssi + ' dBm' : 'Unavailable' }}</span>
       </div>
       <div class="card-row">
         <span class="card-row-label">SNR</span>
-        <span class="card-row-value">{{ snr ? snr + ' dB' : '—' }}</span>
+        <span class="card-row-value">{{ snr ? snr + ' dB' : 'Unavailable' }}</span>
       </div>
       <div class="card-row">
         <span class="card-row-label">Band · Channel</span>
         <span class="card-row-value">{{ bandChannel }}</span>
       </div>
       <div class="card-row">
-        <span class="card-row-label">Link Rate</span>
-        <span class="card-row-value">{{ rate ? rate + ' Mbps' : '—' }}</span>
+        <span class="card-row-label" title="Negotiated Wi-Fi PHY radio rate, not internet throughput">
+          Wi-Fi PHY Link Rate
+        </span>
+        <span class="card-row-value font-mono font-bold">{{ rate ? rate + ' Mbps' : 'Unavailable' }}</span>
+      </div>
+      <div v-if="localHostIP" class="card-row">
+        <span class="card-row-label">Local Host IP</span>
+        <span class="card-row-value font-mono text-[var(--subtle)]">{{ localHostIP }}</span>
       </div>
       <div class="card-divider" />
-      <div class="flex items-center gap-2">
-        <div style="flex:1;height:4px;background:var(--border);border-radius:2px;overflow:hidden">
-          <div :style="{ width: signalPct + '%', background: signalColor, height: '100%', borderRadius: '2px', transition: 'width 0.5s ease' }" />
+      <div class="flex items-center justify-between text-[10px] text-muted">
+        <div class="flex items-center gap-2 flex-1">
+          <div style="flex:1;height:4px;background:var(--border);border-radius:2px;overflow:hidden">
+            <div :style="{ width: signalPct + '%', background: signalColor, height: '100%', borderRadius: '2px', transition: 'width 0.5s ease' }" />
+          </div>
+          <span style="font-size:0.6875rem;font-weight:600;min-width:52px;text-align:right" :style="{ color: signalColor }">{{ signalQuality }}</span>
         </div>
-        <span style="font-size:0.6875rem;font-weight:600;min-width:52px;text-align:right" :style="{ color: signalColor }">{{ signalQuality }}</span>
+        <span class="ml-2 pl-2 border-l border-[var(--border)]">{{ measuredAgo }}</span>
       </div>
     </div>
 
     <!-- Ethernet details -->
     <div v-else-if="type === 'ethernet'" class="flex flex-col gap-1.5">
       <div class="card-row">
-        <span class="card-row-label">Link Speed</span>
-        <span class="card-row-value" :style="{ color: ethSpeedColor }">{{ rate ? ethSpeed : '—' }}</span>
+        <span class="card-row-label">Ethernet Link Speed</span>
+        <span class="card-row-value" :style="{ color: ethSpeedColor }">{{ rate ? ethSpeed : 'Unavailable' }}</span>
       </div>
       <div class="card-row">
         <span class="card-row-label">Duplex</span>
         <span class="card-row-value">{{ duplexLabel }}</span>
       </div>
+      <div v-if="localHostIP" class="card-row">
+        <span class="card-row-label">Local Host IP</span>
+        <span class="card-row-value font-mono">{{ localHostIP }}</span>
+      </div>
+      <div class="card-divider" />
+      <div class="text-[10px] text-muted text-right">{{ measuredAgo }}</div>
     </div>
   </AccordionCard>
 </template>
@@ -62,8 +85,15 @@
 <script setup>
 import { computed } from 'vue'
 import AccordionCard from './AccordionCard.vue'
+import { formatTimeAgo } from '../utils/time.js'
 
-const props = defineProps({ history: Array })
+const props = defineProps({
+  history: Array,
+  now: { type: Number, default: () => Date.now() },
+  connectionInfo: { type: Object, default: () => null },
+  networkId: { type: String, default: '' },
+  localIp: { type: String, default: '' },
+})
 
 const conn = computed(() => {
   if (!props.history?.length) return null
@@ -71,22 +101,46 @@ const conn = computed(() => {
   return latest.conn_type ? latest : null
 })
 
-const type   = computed(() => conn.value?.conn_type ?? '')
-const rssi   = computed(() => conn.value?.conn_rssi ?? 0)
-const snr    = computed(() => conn.value?.conn_snr ?? 0)
-const band   = computed(() => conn.value?.conn_band ?? '')
-const ch     = computed(() => conn.value?.conn_channel ?? 0)
-const rate   = computed(() => conn.value?.conn_link_rate ?? 0)
-const duplex = computed(() => conn.value?.conn_duplex ?? '')
+const ssidName = computed(() => {
+  return props.networkId || props.connectionInfo?.ssid || conn.value?.network_id || 'Connected Wi-Fi'
+})
 
-const signalPct  = computed(() => Math.max(0, Math.min(100, ((rssi.value + 90) / 60) * 100)))
+const radioStandard = computed(() => {
+  return props.connectionInfo?.radio_type || (band.value === '5GHz' ? '802.11ax (Wi-Fi 6)' : '802.11n/ac')
+})
+
+const localHostIP = computed(() => {
+  return props.localIp || props.connectionInfo?.ip || ''
+})
+
+const measuredAgo = computed(() => {
+  if (!conn.value?.timestamp) return ''
+  return 'sampled ' + formatTimeAgo(conn.value.timestamp, props.now)
+})
+
+const type   = computed(() => conn.value?.conn_type ?? props.connectionInfo?.type ?? '')
+const rssi   = computed(() => conn.value?.conn_rssi ?? props.connectionInfo?.rssi ?? 0)
+const snr    = computed(() => conn.value?.conn_snr ?? props.connectionInfo?.snr ?? 0)
+const band   = computed(() => conn.value?.conn_band ?? props.connectionInfo?.band ?? '')
+const ch     = computed(() => conn.value?.conn_channel ?? props.connectionInfo?.channel ?? 0)
+const rate   = computed(() => conn.value?.conn_link_rate ?? props.connectionInfo?.link_rate ?? 0)
+const duplex = computed(() => conn.value?.conn_duplex ?? props.connectionInfo?.duplex ?? '')
+
+const signalPct  = computed(() => {
+  if (!rssi.value) return 0
+  return Math.max(0, Math.min(100, ((rssi.value + 90) / 60) * 100))
+})
+
 const signalColor = computed(() => {
+  if (!rssi.value) return 'var(--muted)'
   if (rssi.value >= -50) return 'var(--green)'
   if (rssi.value >= -65) return 'var(--green)'
   if (rssi.value >= -75) return 'var(--yellow)'
   return 'var(--red)'
 })
+
 const signalQuality = computed(() => {
+  if (!rssi.value) return 'Unavailable'
   if (rssi.value >= -50) return 'Excellent'
   if (rssi.value >= -65) return 'Good'
   if (rssi.value >= -75) return 'Fair'
@@ -95,6 +149,6 @@ const signalQuality = computed(() => {
 
 const ethSpeed      = computed(() => rate.value >= 1000 ? (rate.value / 1000) + ' Gbps' : rate.value + ' Mbps')
 const ethSpeedColor = computed(() => rate.value >= 1000 ? 'var(--green)' : 'var(--fg)')
-const duplexLabel   = computed(() => duplex.value ? duplex.value.charAt(0).toUpperCase() + duplex.value.slice(1) + ' duplex' : '—')
-const bandChannel   = computed(() => [band.value, ch.value ? 'ch. ' + ch.value : ''].filter(Boolean).join(' · ') || '—')
+const duplexLabel   = computed(() => duplex.value ? duplex.value.charAt(0).toUpperCase() + duplex.value.slice(1) + ' duplex' : 'Unavailable')
+const bandChannel   = computed(() => [band.value, ch.value ? 'ch. ' + ch.value : ''].filter(Boolean).join(' · ') || 'Unavailable')
 </script>

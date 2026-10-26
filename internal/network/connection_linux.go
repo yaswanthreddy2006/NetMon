@@ -4,28 +4,41 @@ package network
 
 import (
 	"os"
-	"os/exec"
 	"strconv"
 	"strings"
 )
 
 // ConnectionInfo describes the active network connection regardless of type.
 type ConnectionInfo struct {
-	Type     string // "wifi", "ethernet", or ""
-	RSSI     int    // signal strength dBm (WiFi only; 0 = unavailable)
-	Noise    int    // noise floor dBm (unavailable on Linux without extra tools)
-	SNR      int    // signal-to-noise ratio dB (unavailable when noise unknown)
-	Channel  int    // WiFi channel (0 = unavailable)
-	Band     string // "2GHz", "5GHz", "6GHz", or ""
-	LinkRate int    // link rate / speed Mbps (0 = unavailable)
-	Duplex   string // "full", "half", or "" (Ethernet)
+	Type              string `json:"type"` // "wifi", "ethernet", or ""
+	SSID              string `json:"ssid,omitempty"`
+	BSSID             string `json:"bssid,omitempty"`
+	RSSI              int    `json:"rssi"`               // signal strength dBm (negative; 0 = unavailable)
+	SignalQuality     int    `json:"signal_quality"`      // 0-100 percentage
+	Noise             int    `json:"noise"`              // noise floor dBm (negative; 0 = unavailable)
+	SNR               int    `json:"snr"`                // signal-to-noise ratio dB (0 = unavailable)
+	Channel           int    `json:"channel"`            // WiFi channel number (0 = unavailable)
+	ChannelWidth      string `json:"channel_width,omitempty"`
+	Band              string `json:"band"`               // "2.4GHz", "5GHz", "6GHz", or ""
+	RadioType         string `json:"radio_type,omitempty"`
+	LinkRate          int    `json:"link_rate"`          // Wi-Fi PHY Link Rate / Ethernet Link Speed Mbps (0 = unavailable)
+	Duplex            string `json:"duplex,omitempty"`   // "full", "half", or ""
+	Adapter           string `json:"adapter,omitempty"`
+	Status            string `json:"status"`
+	UnavailableReason string `json:"unavailable_reason,omitempty"`
+	IP                string `json:"ip,omitempty"`
+	Gateway           string `json:"gateway,omitempty"`
 }
 
 // GetConnectionInfo detects the active interface type and returns its details.
 func GetConnectionInfo() (ConnectionInfo, bool) {
 	iface := linuxActiveInterface()
 	if iface == "" {
-		return ConnectionInfo{}, false
+		return ConnectionInfo{
+			Type:              "none",
+			Status:            "disconnected",
+			UnavailableReason: "No active default network interface found",
+		}, false
 	}
 	if linuxIsWifi(iface) {
 		return linuxWifiInfo(iface)
@@ -35,7 +48,6 @@ func GetConnectionInfo() (ConnectionInfo, bool) {
 
 // linuxActiveInterface returns the interface used for the default route.
 func linuxActiveInterface() string {
-	// Fast path: /proc/net/route
 	if data, err := os.ReadFile("/proc/net/route"); err == nil {
 		for _, line := range strings.Split(string(data), "\n")[1:] {
 			fields := strings.Fields(line)
@@ -44,8 +56,7 @@ func linuxActiveInterface() string {
 			}
 		}
 	}
-	// Fallback: ip route get
-	out, err := exec.Command("ip", "route", "get", "1.1.1.1").Output()
+	out, err := ExecCommandWithTimeout(DefaultCommandTimeout, "ip", "route", "get", "1.1.1.1")
 	if err != nil {
 		return ""
 	}
@@ -58,29 +69,50 @@ func linuxActiveInterface() string {
 	return ""
 }
 
-// linuxIsWifi returns true when the interface has a wireless sysfs directory.
 func linuxIsWifi(iface string) bool {
 	_, err := os.Stat("/sys/class/net/" + iface + "/wireless")
 	return err == nil
 }
 
-// linuxWifiInfo reads WiFi stats via iw for the given interface.
 func linuxWifiInfo(iface string) (ConnectionInfo, bool) {
-	out, err := exec.Command("iw", "dev", iface, "link").Output()
+	out, err := ExecCommandWithTimeout(DefaultCommandTimeout, "iw", "dev", iface, "link")
 	if err != nil {
-		return ConnectionInfo{}, false
+		return ConnectionInfo{
+			Type:              "wifi",
+			Status:            "unavailable",
+			UnavailableReason: "iw command failed",
+		}, false
 	}
 	if strings.Contains(string(out), "Not connected") {
 		return ConnectionInfo{}, false
 	}
 	var info ConnectionInfo
 	info.Type = "wifi"
+	info.Status = "connected"
+	info.Adapter = iface
+
 	for _, line := range strings.Split(string(out), "\n") {
 		line = strings.TrimSpace(line)
 		switch {
+		case strings.HasPrefix(line, "SSID:"):
+			info.SSID = strings.TrimSpace(strings.TrimPrefix(line, "SSID:"))
+		case strings.HasPrefix(line, "Connected to "):
+			fields := strings.Fields(line)
+			if len(fields) >= 3 {
+				info.BSSID = fields[2]
+			}
 		case strings.HasPrefix(line, "signal:"):
 			val := strings.TrimSuffix(strings.TrimSpace(strings.TrimPrefix(line, "signal:")), " dBm")
 			info.RSSI, _ = strconv.Atoi(strings.TrimSpace(val))
+			// Approximate quality
+			if info.RSSI <= -100 {
+				info.SignalQuality = 0
+			} else if info.RSSI >= -50 {
+				info.SignalQuality = 100
+			} else {
+				info.SignalQuality = 2 * (info.RSSI + 100)
+			}
+			info.SNR = info.SignalQuality / 2
 		case strings.HasPrefix(line, "rx bitrate:"):
 			if f := strings.Fields(line); len(f) >= 3 {
 				mbps, err := strconv.ParseFloat(f[2], 64)
@@ -93,7 +125,7 @@ func linuxWifiInfo(iface string) (ConnectionInfo, bool) {
 				freq, _ := strconv.Atoi(f[1])
 				switch {
 				case freq >= 2401 && freq <= 2495:
-					info.Band = "2GHz"
+					info.Band = "2.4GHz"
 					info.Channel = (freq - 2407) / 5
 				case freq >= 4900 && freq <= 5895:
 					info.Band = "5GHz"
@@ -105,13 +137,12 @@ func linuxWifiInfo(iface string) (ConnectionInfo, bool) {
 			}
 		}
 	}
-	if info.RSSI == 0 {
+	if info.RSSI == 0 && info.LinkRate == 0 {
 		return ConnectionInfo{}, false
 	}
 	return info, true
 }
 
-// linuxEthernetInfo reads link speed and duplex from sysfs.
 func linuxEthernetInfo(iface string) (ConnectionInfo, bool) {
 	base := "/sys/class/net/" + iface + "/"
 	speedData, err := os.ReadFile(base + "speed")
@@ -124,5 +155,11 @@ func linuxEthernetInfo(iface string) (ConnectionInfo, bool) {
 	}
 	duplexData, _ := os.ReadFile(base + "duplex")
 	duplex := strings.TrimSpace(string(duplexData))
-	return ConnectionInfo{Type: "ethernet", LinkRate: speed, Duplex: duplex}, true
+	return ConnectionInfo{
+		Type:     "ethernet",
+		Adapter:  iface,
+		LinkRate: speed,
+		Duplex:   duplex,
+		Status:   "connected",
+	}, true
 }

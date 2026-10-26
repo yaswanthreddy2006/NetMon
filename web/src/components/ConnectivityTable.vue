@@ -1,7 +1,7 @@
 <template>
   <table class="target-table">
     <thead v-if="targets?.length">
-      <tr><th>Host</th><th>Latency</th><th>Loss</th></tr>
+      <tr><th>Host / Method</th><th>Latency (min/avg/max)</th><th>Loss (lost/sent)</th></tr>
     </thead>
     <tbody>
       <tr v-if="!targets?.length">
@@ -14,19 +14,55 @@
       </tr>
       <tr v-else v-for="t in targets" :key="t.host">
         <td>
-          <div class="host-cell">
-            <span class="inline-dot" :class="t.status === 'up' ? 'up' : 'down'" />
-            <span>{{ t.host }}</span>
+          <div class="host-cell flex items-center gap-1.5">
+            <span class="inline-dot" :class="t.status === 'up' ? 'up' : t.status === 'degraded' ? 'degraded' : 'down'" />
+            <span class="font-medium">{{ t.host === 'gateway' ? 'Gateway' : t.host }}</span>
+            <span v-if="t.host === 'gateway'" class="text-[9px] uppercase tracking-wider px-1.5 py-0.5 rounded bg-blue-500/10 text-blue-500 font-bold ml-0.5">GW</span>
+            <span
+              v-if="t.method"
+              class="text-[9px] uppercase tracking-wider px-1 py-0.2 rounded font-mono font-medium"
+              :class="t.method === 'icmp' ? 'bg-muted/10 text-muted' : 'bg-amber-500/10 text-amber-500 border border-amber-500/20'"
+              :title="t.method === 'icmp' ? 'Native ICMP Echo' : 'TCP Connect Fallback'"
+            >
+              {{ t.method === 'icmp' ? 'ICMP' : 'TCP' }}
+            </span>
           </div>
-          <div class="ip-cell">{{ t.ip }}</div>
+          <div class="ip-cell flex items-center gap-1.5 text-[10px] text-muted">
+            <span class="font-mono">{{ t.ip || 'Resolving…' }}</span>
+            <span v-if="t.jitter > 0" class="text-[9px]">· Jitter: {{ t.jitter }}ms</span>
+            <span v-if="t.last_checked" class="text-[9px]">· {{ formatAgo(t.last_checked) }}</span>
+          </div>
         </td>
-        <td class="font-semibold">{{ t.latency }} ms</td>
-        <td class="font-semibold">{{ t.loss }}%</td>
+        <td>
+          <div class="font-semibold text-xs text-[var(--fg)]">
+            {{ t.latency > 0 ? t.latency + ' ms' : (t.status === 'down' ? 'Down' : '—') }}
+          </div>
+          <div v-if="t.min_latency > 0 || t.max_latency > 0" class="text-[9px] text-muted font-mono">
+            {{ t.min_latency }} / {{ t.avg_latency || t.latency }} / {{ t.max_latency }} ms
+          </div>
+        </td>
+        <td>
+          <div class="font-semibold text-xs" :class="t.loss > 0 ? 'text-amber-500' : 'text-emerald-500'">
+            {{ t.loss }}%
+          </div>
+          <div v-if="t.probes_sent > 0" class="text-[9px] text-muted font-mono">
+            {{ t.probes_lost }}/{{ t.probes_sent }} lost
+          </div>
+        </td>
       </tr>
     </tbody>
   </table>
 </template>
 
 <script setup>
-defineProps({ targets: Array })
+import { formatTimeAgo } from '../utils/time.js'
+
+const props = defineProps({
+  targets: Array,
+  now: { type: Number, default: () => Date.now() },
+})
+
+function formatAgo(ts) {
+  return formatTimeAgo(ts, props.now)
+}
 </script>

@@ -12,7 +12,7 @@
           <h1 class="text-lg sm:text-2xl font-extrabold tracking-tight leading-none">netmon</h1>
           <span class="status-badge flex-shrink-0" :class="status">
             <span class="status-dot" />
-            {{ status.charAt(0).toUpperCase() + status.slice(1) }}
+            {{ statusLabel || (status.charAt(0).toUpperCase() + status.slice(1)) }}
           </span>
         </div>
         <p class="text-xs mt-0.5 flex items-center gap-1.5 truncate" style="color:var(--subtle)">
@@ -46,14 +46,15 @@
 
 <script setup>
 defineProps({
-  status:       { type: String, default: 'online' },
-  targetCount:  { type: Number, default: 0 },
-  networkLabel: { type: String, default: '—' },
-  agoLabel:     { type: String, default: '—' },
-  isRefreshing: { type: Boolean, default: false },
-  isDark:       { type: Boolean, default: false },
+  status:         { type: String, default: 'online' },
+  statusLabel:    { type: String, default: '' },
+  targetCount:    { type: Number, default: 0 },
+  networkLabel:   { type: String, default: '—' },
+  agoLabel:       { type: String, default: '—' },
+  isRefreshing:   { type: Boolean, default: false },
+  isDark:         { type: Boolean, default: false },
   currentMinutes: { type: Number, default: 60 },
-  connType:     { type: String, default: '' },
+  connType:       { type: String, default: '' },
 })
 
 defineEmits(['toggle-theme', 'open-settings', 'set-duration'])

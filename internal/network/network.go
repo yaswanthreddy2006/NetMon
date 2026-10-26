@@ -1,6 +1,7 @@
 package network
 
 import (
+	"context"
 	"encoding/hex"
 	"fmt"
 	"net"
@@ -8,7 +9,31 @@ import (
 	"os/exec"
 	"runtime"
 	"strings"
+	"time"
 )
+
+// DefaultCommandTimeout is the maximum time allowed for local network system commands.
+const DefaultCommandTimeout = 3 * time.Second
+
+// ExecCommandWithTimeout runs an external command with a strict timeout context to prevent hangs.
+func ExecCommandWithTimeout(timeout time.Duration, name string, args ...string) ([]byte, error) {
+	if timeout <= 0 {
+		timeout = DefaultCommandTimeout
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+	return exec.CommandContext(ctx, name, args...).Output()
+}
+
+// ExecCommandCombinedWithTimeout runs an external command with a strict timeout context returning combined output.
+func ExecCommandCombinedWithTimeout(timeout time.Duration, name string, args ...string) ([]byte, error) {
+	if timeout <= 0 {
+		timeout = DefaultCommandTimeout
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+	return exec.CommandContext(ctx, name, args...).CombinedOutput()
+}
 
 // Info describes the current network the device is on.
 type Info struct {
@@ -18,6 +43,38 @@ type Info struct {
 	SSID string
 	// Gateway is the default gateway IP.
 	Gateway string
+	// LocalIP is the outbound local IPv4 address of the active network interface.
+	LocalIP string
+}
+
+// OutboundIP returns the local IP address used for outbound communication.
+func OutboundIP() string {
+	conn, err := net.DialTimeout("udp", "8.8.8.8:80", 1*time.Second)
+	if err != nil {
+		ifaces, err := net.Interfaces()
+		if err == nil {
+			for _, iface := range ifaces {
+				if iface.Flags&net.FlagUp == 0 || iface.Flags&net.FlagLoopback != 0 {
+					continue
+				}
+				addrs, err := iface.Addrs()
+				if err != nil {
+					continue
+				}
+				for _, addr := range addrs {
+					if ipNet, ok := addr.(*net.IPNet); ok && !ipNet.IP.IsLoopback() && ipNet.IP.To4() != nil {
+						return ipNet.IP.String()
+					}
+				}
+			}
+		}
+		return ""
+	}
+	defer conn.Close()
+	if localAddr, ok := conn.LocalAddr().(*net.UDPAddr); ok {
+		return localAddr.IP.String()
+	}
+	return ""
 }
 
 // Detect returns the current network identity using SSID when available,
@@ -26,6 +83,7 @@ type Info struct {
 func Detect() Info {
 	gw := DefaultGateway()
 	ssid := detectSSID()
+	localIP := OutboundIP()
 
 	id := "unknown"
 	switch {
@@ -35,7 +93,7 @@ func Detect() Info {
 		id = "gw:" + gw
 	}
 
-	return Info{ID: id, SSID: ssid, Gateway: gw}
+	return Info{ID: id, SSID: ssid, Gateway: gw, LocalIP: localIP}
 }
 
 // DefaultGateway returns the default gateway IP in a cross-platform way.
@@ -56,7 +114,7 @@ func DefaultGateway() string {
 // darwinRoute parses "route get default" and returns the default (gateway, interface).
 // Shared by DefaultGateway and GetConnectionInfo to avoid running the command twice.
 func darwinRoute() (gateway, iface string) {
-	out, _ := exec.Command("route", "get", "default").CombinedOutput()
+	out, _ := ExecCommandCombinedWithTimeout(DefaultCommandTimeout, "route", "get", "default")
 	for _, line := range strings.Split(string(out), "\n") {
 		line = strings.TrimSpace(line)
 		switch {
@@ -96,7 +154,7 @@ func gatewayLinuxProc() string {
 }
 
 func gatewayLinuxCmd() string {
-	out, err := exec.Command("ip", "route", "show", "default").CombinedOutput()
+	out, err := ExecCommandCombinedWithTimeout(DefaultCommandTimeout, "ip", "route", "show", "default")
 	if err != nil {
 		return ""
 	}
@@ -113,7 +171,7 @@ func gatewayLinuxCmd() string {
 }
 
 func gatewayWindows() string {
-	out, err := exec.Command("route", "print", "0.0.0.0").CombinedOutput()
+	out, err := ExecCommandCombinedWithTimeout(DefaultCommandTimeout, "route", "print", "0.0.0.0")
 	if err != nil {
 		return ""
 	}
@@ -144,7 +202,7 @@ func detectSSID() string {
 
 func ssidDarwin() string {
 	for _, iface := range []string{"en0", "en1", "en2", "en3"} {
-		out, err := exec.Command("networksetup", "-getairportnetwork", iface).Output()
+		out, err := ExecCommandWithTimeout(DefaultCommandTimeout, "networksetup", "-getairportnetwork", iface)
 		if err != nil {
 			continue
 		}
@@ -158,12 +216,12 @@ func ssidDarwin() string {
 }
 
 func ssidLinux() string {
-	if out, err := exec.Command("iwgetid", "-r").Output(); err == nil {
+	if out, err := ExecCommandWithTimeout(DefaultCommandTimeout, "iwgetid", "-r"); err == nil {
 		if ssid := strings.TrimSpace(string(out)); ssid != "" {
 			return ssid
 		}
 	}
-	out, err := exec.Command("iw", "dev").Output()
+	out, err := ExecCommandWithTimeout(DefaultCommandTimeout, "iw", "dev")
 	if err != nil {
 		return ""
 	}
@@ -180,15 +238,35 @@ func ssidLinux() string {
 }
 
 func ssidWindows() string {
-	out, err := exec.Command("netsh", "wlan", "show", "interfaces").Output()
+	out, err := ExecCommandWithTimeout(DefaultCommandTimeout, "netsh", "wlan", "show", "interfaces")
 	if err != nil {
 		return ""
+	}
+	var inConnectedBlock bool
+	for _, line := range strings.Split(string(out), "\n") {
+		line = strings.TrimSpace(line)
+		parts := strings.SplitN(line, ":", 2)
+		if len(parts) == 2 {
+			k := strings.ToLower(strings.TrimSpace(parts[0]))
+			v := strings.TrimSpace(parts[1])
+			if k == "state" || k == "status" {
+				inConnectedBlock = (v == "connected" || strings.Contains(v, "verbunden"))
+			}
+			if inConnectedBlock && k == "ssid" {
+				if v != "" {
+					return v
+				}
+			}
+		}
 	}
 	for _, line := range strings.Split(string(out), "\n") {
 		line = strings.TrimSpace(line)
 		parts := strings.SplitN(line, ":", 2)
 		if len(parts) == 2 && strings.TrimSpace(parts[0]) == "SSID" {
-			return strings.TrimSpace(parts[1])
+			val := strings.TrimSpace(parts[1])
+			if val != "" {
+				return val
+			}
 		}
 	}
 	return ""

@@ -2,13 +2,18 @@ package server
 
 import (
 	"archive/tar"
+	"bufio"
 	"compress/gzip"
+	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"io"
 	"net/http"
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"time"
 )
 
@@ -32,13 +37,12 @@ func (h *Handler) TriggerUpdate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	tag    := vr.Latest
-	goos   := runtime.GOOS
+	tag := vr.Latest
+	goos := runtime.GOOS
 	goarch := runtime.GOARCH
-	archiveURL := fmt.Sprintf(
-		"https://github.com/yaswanthreddy2006/NetMon/releases/download/%s/netmon_%s_%s.tar.gz",
-		tag, goos, goarch,
-	)
+	archiveName := fmt.Sprintf("netmon_%s_%s.tar.gz", goos, goarch)
+	archiveURL := fmt.Sprintf("https://github.com/yaswanthreddy2006/NetMon/releases/download/%s/%s", tag, archiveName)
+	checksumURL := fmt.Sprintf("https://github.com/yaswanthreddy2006/NetMon/releases/download/%s/checksums.txt", tag)
 
 	// Respond before restarting so the client gets the response.
 	writeJSON(w, http.StatusOK, map[string]string{"status": "updating", "version": tag})
@@ -48,18 +52,57 @@ func (h *Handler) TriggerUpdate(w http.ResponseWriter, r *http.Request) {
 
 	go func() {
 		time.Sleep(300 * time.Millisecond)
-		if err := downloadAndReplace(archiveURL, execPath); err != nil {
-			// Cannot write to the client at this point; the update silently failed.
-			// The polling loop on the frontend will time out and show an error.
+		if err := downloadAndReplace(archiveURL, checksumURL, archiveName, execPath); err != nil {
 			return
 		}
 		restart(execPath)
 	}()
 }
 
-func downloadAndReplace(url, execPath string) error {
+func fetchExpectedChecksum(checksumURL, filename string) (string, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, checksumURL, nil)
+	if err != nil {
+		return "", err
+	}
+	req.Header.Set("User-Agent", "NetMon/Update")
+
+	client := &http.Client{Timeout: 15 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("HTTP %d", resp.StatusCode)
+	}
+
+	scanner := bufio.NewScanner(resp.Body)
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		fields := strings.Fields(line)
+		if len(fields) == 2 && (fields[1] == filename || strings.TrimPrefix(fields[1], "*") == filename) {
+			return fields[0], nil
+		}
+	}
+	return "", fmt.Errorf("checksum for %s not found in checksums.txt", filename)
+}
+
+func downloadAndReplace(archiveURL, checksumURL, archiveName, execPath string) error {
+	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
+	defer cancel()
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, archiveURL, nil)
+	if err != nil {
+		return fmt.Errorf("create download request: %w", err)
+	}
+	req.Header.Set("User-Agent", "NetMon/Update")
+
 	client := &http.Client{Timeout: 120 * time.Second}
-	resp, err := client.Get(url)
+	resp, err := client.Do(req)
 	if err != nil {
 		return fmt.Errorf("download: %w", err)
 	}
@@ -82,7 +125,10 @@ func downloadAndReplace(url, execPath string) error {
 		}
 	}()
 
-	gz, err := gzip.NewReader(io.LimitReader(resp.Body, maxBinarySize))
+	hasher := sha256.New()
+	tee := io.TeeReader(resp.Body, hasher)
+
+	gz, err := gzip.NewReader(io.LimitReader(tee, maxBinarySize))
 	if err != nil {
 		return fmt.Errorf("gzip: %w", err)
 	}
@@ -109,6 +155,17 @@ func downloadAndReplace(url, execPath string) error {
 
 	if !found {
 		return fmt.Errorf("netmon binary not found in release archive")
+	}
+
+	// Read rest of archive to finish computing sha256 of archive if needed
+	_, _ = io.Copy(io.Discard, tee)
+
+	// Verify SHA256 checksum if available
+	if expectedHash, err := fetchExpectedChecksum(checksumURL, archiveName); err == nil && expectedHash != "" {
+		computedHash := hex.EncodeToString(hasher.Sum(nil))
+		if !strings.EqualFold(computedHash, expectedHash) {
+			return fmt.Errorf("checksum mismatch (computed %s, expected %s)", computedHash, expectedHash)
+		}
 	}
 
 	if err := tmp.Chmod(0755); err != nil {

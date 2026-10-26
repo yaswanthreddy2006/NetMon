@@ -59,5 +59,5 @@ func LoadConfigFile(path string) (Config, error) {
 	if fc.UploadURL != "" {
 		cfg.UploadURL = fc.UploadURL
 	}
-	return cfg, nil
+	return ValidateConfig(cfg), nil
 }

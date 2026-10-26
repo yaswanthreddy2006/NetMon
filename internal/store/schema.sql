@@ -18,22 +18,46 @@ CREATE TABLE IF NOT EXISTS measurements (
 	conn_duplex    TEXT    NOT NULL DEFAULT ''
 );
 
+CREATE TABLE IF NOT EXISTS speed_tests (
+	id               INTEGER PRIMARY KEY AUTOINCREMENT,
+	ts               TEXT    NOT NULL,
+	download_mbps    REAL    NOT NULL DEFAULT 0,
+	upload_mbps      REAL    NOT NULL DEFAULT 0,
+	duration_seconds REAL    NOT NULL DEFAULT 0,
+	bytes_down       INTEGER NOT NULL DEFAULT 0,
+	bytes_up         INTEGER NOT NULL DEFAULT 0,
+	status           TEXT    NOT NULL DEFAULT 'ok',
+	error            TEXT    NOT NULL DEFAULT ''
+);
+
 CREATE TABLE IF NOT EXISTS ping_targets (
-	id         INTEGER PRIMARY KEY AUTOINCREMENT,
-	host       TEXT NOT NULL UNIQUE,
-	ip         TEXT NOT NULL DEFAULT '',
-	latency    REAL NOT NULL DEFAULT 0,
-	loss       REAL NOT NULL DEFAULT 0,
-	status     TEXT NOT NULL DEFAULT 'unknown',
-	updated_at TEXT NOT NULL
+	id          INTEGER PRIMARY KEY AUTOINCREMENT,
+	host        TEXT NOT NULL UNIQUE,
+	ip          TEXT NOT NULL DEFAULT '',
+	latency     REAL NOT NULL DEFAULT 0,
+	min_latency REAL NOT NULL DEFAULT 0,
+	max_latency REAL NOT NULL DEFAULT 0,
+	avg_latency REAL NOT NULL DEFAULT 0,
+	jitter      REAL NOT NULL DEFAULT 0,
+	loss        REAL NOT NULL DEFAULT 0,
+	probes_sent INTEGER NOT NULL DEFAULT 0,
+	probes_recv INTEGER NOT NULL DEFAULT 0,
+	probes_lost INTEGER NOT NULL DEFAULT 0,
+	method      TEXT NOT NULL DEFAULT 'icmp',
+	status      TEXT NOT NULL DEFAULT 'unknown',
+	updated_at  TEXT NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS dns_checks (
-	id         INTEGER PRIMARY KEY AUTOINCREMENT,
-	host       TEXT NOT NULL UNIQUE,
-	time_ms    REAL NOT NULL DEFAULT 0,
-	resolver   TEXT NOT NULL DEFAULT 'system',
-	updated_at TEXT NOT NULL
+	id          INTEGER PRIMARY KEY AUTOINCREMENT,
+	host        TEXT NOT NULL UNIQUE,
+	time_ms     REAL NOT NULL DEFAULT 0,
+	resolver    TEXT NOT NULL DEFAULT 'system',
+	server_ip   TEXT NOT NULL DEFAULT '',
+	status      TEXT NOT NULL DEFAULT 'SUCCESS',
+	rcode_name  TEXT NOT NULL DEFAULT 'NOERROR',
+	error       TEXT NOT NULL DEFAULT '',
+	updated_at  TEXT NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS network_events (
@@ -49,5 +73,6 @@ CREATE TABLE IF NOT EXISTS settings (
 	value TEXT NOT NULL DEFAULT ''
 );
 
-CREATE INDEX IF NOT EXISTS idx_measurements_ts    ON measurements(ts);
-CREATE INDEX IF NOT EXISTS idx_network_events_ts  ON network_events(ts);
+CREATE INDEX IF NOT EXISTS idx_measurements_ts   ON measurements(ts);
+CREATE INDEX IF NOT EXISTS idx_speed_tests_ts    ON speed_tests(ts);
+CREATE INDEX IF NOT EXISTS idx_network_events_ts ON network_events(ts);

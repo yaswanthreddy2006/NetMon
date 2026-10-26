@@ -70,7 +70,7 @@ Or with Docker Compose:
 docker compose -f infra/docker-compose.yml up -d
 ```
 
-Then open **http://localhost:8080**.
+Then open **http://localhost:8081**.
 
 ### Build from source
 

@@ -1,0 +1,779 @@
+<!DOCTYPE html><html class="dark" lang="en"><head>
+<meta charset="utf-8">
+<meta content="width=device-width, initial-scale=1.0" name="viewport">
+<title>NetMon - Real-Time Network Observability</title>
+<!-- Tailwind CSS v3 with Plugins -->
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            brand: {
+              darkest: '#080b11',
+              dark: '#0e131f',
+              card: '#121726',
+              border: '#1e2638',
+              muted: '#62728f',
+              accent: '#00f2aa',
+              blue: '#3b82f6',
+              purple: '#a855f7',
+              rose: '#f43f5e',
+              amber: '#f59e0b'
+            }
+          },
+          fontFamily: {
+            mono: ['"JetBrains Mono"', 'ui-monospace', 'SFMono-Regular', 'Menlo', 'monospace'],
+            sans: ['"Inter"', 'system-ui', '-apple-system', 'sans-serif']
+          }
+        }
+      }
+    }
+  </script>
+<!-- Google Fonts: Inter & JetBrains Mono -->
+<link href="https://fonts.googleapis.com" rel="preconnect">
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;500;600&amp;display=swap" rel="stylesheet">
+<style data-purpose="custom-layout">
+    body {
+      background-color: #080c14;
+      color: #94a3b8;
+      font-family: 'Inter', sans-serif;
+      overflow-x: hidden;
+      margin: 0;
+      padding: 0;
+      -webkit-font-smoothing: antialiased;
+    }
+    .custom-scrollbar::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    .custom-scrollbar::-webkit-scrollbar-track {
+      background: #0b0f17;
+    }
+    .custom-scrollbar::-webkit-scrollbar-thumb {
+      background: #1e2638;
+      border-radius: 3px;
+    }
+    .cyber-scanlines {
+      background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.25) 50%), linear-gradient(90deg, rgba(255, 0, 0, 0.03), rgba(0, 255, 0, 0.01), rgba(0, 0, 255, 0.03));
+      background-size: 100% 3px, 6px 100%;
+    }
+    .network-grid-pattern {
+      background-image: radial-gradient(rgba(6, 182, 212, 0.12) 1px, transparent 1px);
+      background-size: 24px 24px;
+    }
+  </style>
+<style data-purpose="animations">
+    @keyframes pulse-subtle {
+      0%, 100% { opacity: 0.9; transform: scale(1); }
+      50% { opacity: 0.4; transform: scale(0.97); }
+    }
+    @keyframes radar-wave {
+      0% { r: 4px; opacity: 0.8; stroke-width: 1.5; }
+      100% { r: 24px; opacity: 0; stroke-width: 0.5; }
+    }
+    @keyframes sweep {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+    @keyframes packet-dash {
+      to { stroke-dashoffset: -40; }
+    }
+    .animate-pulse-subtle {
+      animation: pulse-subtle 2.5s infinite ease-in-out;
+    }
+    .radar-pulse {
+      animation: radar-wave 2.2s cubic-bezier(0.2, 0.8, 0.4, 1) infinite;
+    }
+    .radar-pulse-delayed {
+      animation: radar-wave 2.2s cubic-bezier(0.2, 0.8, 0.4, 1) infinite;
+      animation-delay: 1.1s;
+    }
+    .stream-line {
+      stroke-dasharray: 4, 8;
+      animation: packet-dash 1.2s linear infinite;
+    }
+    .stream-line-rev {
+      stroke-dasharray: 4, 8;
+      animation: packet-dash 1.2s linear infinite reverse;
+    }
+    @media (prefers-reduced-motion: reduce) {
+      *, ::before, ::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+        scroll-behavior: auto !important;
+      }
+    }
+  </style>
+</head>
+<body class="selection:bg-teal-500 selection:text-black min-h-screen relative bg-[#080c14]">
+<!-- BEGIN: Background Video & Glowing Cybernetic Network Layer -->
+<div class="fixed inset-0 pointer-events-none z-0 overflow-hidden select-none">
+<!-- Looping network cybernetic video background -->
+<video autoplay="" class="absolute inset-0 w-full h-full object-cover opacity-30 mix-blend-screen filter hue-rotate-180 brightness-95 contrast-125 transition-opacity duration-1000" loop="" muted="" playsinline="" poster="https://images.unsplash.com/photo-1558494949-ef010cbdcc31?auto=format&amp;fit=crop&amp;w=1920&amp;q=80">
+<source src="https://assets.mixkit.co/videos/preview/mixkit-network-connection-lines-loop-video-31745-large.mp4" type="video/mp4">
+<source src="https://assets.mixkit.co/videos/preview/mixkit-abstract-laser-lights-background-in-blue-and-purple-41560-large.mp4" type="video/mp4">
+<source src="https://assets.mixkit.co/videos/preview/mixkit-digital-animation-of-screens-with-charts-and-data-31913-large.mp4" type="video/mp4">
+</video>
+<!-- Interactive Network Topology Mesh Canvas Overlay -->
+<canvas class="absolute inset-0 w-full h-full opacity-40 mix-blend-screen" id="bg-topology" width="1280" height="1127"></canvas>
+<!-- High-Tech Matrix Cyber Grid Pattern -->
+<div class="absolute inset-0 network-grid-pattern opacity-30"></div>
+<!-- Subtle CRT Scanlines & Vignette Filter -->
+<div class="absolute inset-0 cyber-scanlines opacity-25"></div>
+<!-- Radial Vignette & Gradient Mask for Maximum Dashboard Text Legibility -->
+<div class="absolute inset-0 bg-gradient-to-b from-[#0a0e17]/90 via-[#0b0f19]/80 to-[#080c14]/92"></div>
+<div class="absolute inset-0 bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-transparent via-[#080c14]/60 to-[#060910]/95"></div>
+</div>
+<!-- END: Background Video & Glowing Cybernetic Network Layer -->
+<!-- BEGIN: MainContainer -->
+<div class="relative z-10 min-h-screen flex flex-col justify-between p-3.5 md:p-5 max-w-[1920px] mx-auto space-y-4">
+<!-- BEGIN: TopHeader -->
+<header class="flex flex-wrap items-center justify-between gap-4 pb-3 border-b border-cyan-500/20 backdrop-blur-md bg-[#0a0e17]/70 px-4 py-3 rounded-lg shadow-xl shadow-cyan-950/20">
+<!-- Brand & Status Block -->
+<div class="flex items-center space-x-6">
+<!-- Logo & Brand Name -->
+<div class="flex items-center space-x-2.5 group cursor-pointer select-none"><div class="relative flex items-center justify-center w-8 h-8 rounded-lg bg-teal-500/10 border border-teal-500/40 text-teal-400 shadow-lg shadow-teal-500/20 logo-glow-filter transition-all duration-300 group-hover:border-cyan-400 group-hover:shadow-cyan-400/30"><span class="absolute inset-0 rounded-lg border border-cyan-400/40 brand-radar-wave pointer-events-none"></span><span class="absolute inset-0 rounded-lg border border-teal-400/30 brand-radar-wave-delayed pointer-events-none"></span><svg class="w-5 h-5 relative z-10 transition-transform duration-300 group-hover:scale-105" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M8.288 15.038a5.25 5.25 0 017.424 0M5.106 11.856c3.807-3.808 9.98-3.808 13.788 0M1.924 8.674c5.565-5.565 14.587-5.565 20.152 0M12.53 18.22l-.53.53-.53-.53a.75.75 0 011.06 0z" stroke-linecap="round" stroke-linejoin="round"></path></svg><span class="absolute -top-0.5 -right-0.5 flex h-2 w-2 z-10"><span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-teal-400 opacity-75"></span><span class="relative inline-flex rounded-full h-2 w-2 bg-teal-500"></span></span></div><span class="text-xl font-bold tracking-tight font-sans drop-shadow brand-text-shimmer">netmon</span><span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-emerald-950/80 text-emerald-400 border border-emerald-700/60 shadow-sm shadow-emerald-500/20"><span class="w-1.5 h-1.5 rounded-full bg-emerald-400 mr-1.5 animate-pulse"></span>Online</span></div>
+<!-- Probes / Connection telemetry -->
+<div class="hidden sm:flex items-center space-x-3 text-xs text-slate-400 border-l border-cyan-900/40 pl-5"><span class="flex items-center text-slate-300"><span class="w-1.5 h-1.5 rounded-full bg-emerald-400 mr-1.5"></span>3 probes</span><span class="text-slate-600">•</span><span class="">5s ago</span><span class="text-slate-600">•</span><span class="text-cyan-400 font-medium font-mono">KLU_WIFI</span><span class="text-slate-600">•</span><span class="text-slate-400">Ping every 120s</span></div>
+</div>
+<!-- Controls & Accounting Banner -->
+<div class="flex items-center space-x-3">
+<!-- Paused Indicator pill -->
+<div class="hidden lg:flex items-center px-3 py-1 rounded bg-[#13192b]/90 border border-amber-900/50 text-amber-400 text-xs font-medium shadow-md space-x-2"><svg class="w-3.5 h-3.5 text-amber-500" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2L1 21h22L12 2zm0 3.99L19.53 19H4.47L12 5.99zM11 10h2v4h-2zm0 6h2v2h-2z"></path></svg><span class="">Paused (6s ago)</span><span class="text-slate-500 font-normal border-l border-slate-700 pl-2 text-[11px]">Per-Process Accounting</span></div>
+<!-- Time Range Selector -->
+<div class="relative inline-flex items-center">
+<button class="flex items-center space-x-2 bg-[#12192b]/80 hover:bg-[#1b253d] text-slate-200 px-3 py-1.5 rounded text-xs font-mono border border-cyan-500/25 transition shadow-sm">
+<svg class="w-3.5 h-3.5 text-cyan-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+<circle cx="12" cy="12" r="10" stroke-width="2"></circle>
+<polyline points="12 6 12 12 16 14" stroke-width="2"></polyline>
+</svg>
+<span class="">1h</span>
+<svg class="w-3 h-3 text-slate-500 ml-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M19 9l-7 7-7-7" stroke-linecap="round" stroke-width="2"></path></svg>
+</button>
+</div>
+<!-- Mode Toggle (Sun) -->
+<button class="p-1.5 rounded bg-[#12192b]/80 hover:bg-[#1b253d] text-slate-400 hover:text-white border border-cyan-500/25 transition shadow-sm" title="Theme">
+<svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+<circle cx="12" cy="12" r="5"></circle>
+<line x1="12" x2="12" y1="1" y2="3"></line>
+<line x1="12" x2="12" y1="21" y2="23"></line>
+<line x1="4.22" x2="5.64" y1="4.22" y2="5.64"></line>
+<line x1="18.36" x2="19.78" y1="18.36" y2="19.78"></line>
+<line x1="1" x2="3" y1="12" y2="12"></line>
+<line x1="21" x2="23" y1="12" y2="12"></line>
+<line x1="4.22" x2="5.64" y1="19.78" y2="18.36"></line>
+<line x1="18.36" x2="19.78" y1="5.64" y2="4.22"></line>
+</svg>
+</button>
+<!-- Settings Gear -->
+<button class="p-1.5 rounded bg-[#12192b]/80 hover:bg-[#1b253d] text-slate-400 hover:text-white border border-cyan-500/25 transition shadow-sm" title="Configuration">
+<svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+<circle cx="12" cy="12" r="3"></circle>
+<path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+</svg>
+</button>
+</div>
+</header>
+<!-- END: TopHeader -->
+<!-- BEGIN: TopMetricCards -->
+<section class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5" data-purpose="kpi-metrics-grid">
+<!-- Metric 1: AVG LATENCY -->
+<div class="relative backdrop-blur-md bg-[#0f1422]/80 border border-cyan-500/20 rounded-lg p-4 flex flex-col justify-between overflow-hidden shadow-2xl shadow-cyan-950/20 hover:border-cyan-400/50 transition">
+<div class="flex items-start justify-between">
+<span class="text-[11px] font-semibold tracking-wider text-slate-400 uppercase font-mono">Avg Latency</span>
+<div class="p-1.5 rounded bg-blue-500/10 text-blue-400 border border-blue-500/20">
+<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+<circle cx="12" cy="12" r="10"></circle>
+<polyline points="12 6 12 12 16 14"></polyline>
+</svg>
+</div>
+</div>
+<div class="my-2 flex items-baseline space-x-3">
+<span class="text-3xl font-bold text-white font-mono tracking-tight" id="val-avg-latency">26 <span class="text-base font-normal text-slate-400">ms</span></span>
+</div>
+<div class="flex items-center justify-between pt-1">
+<span class="text-xs text-slate-400 font-mono">p95 91.3 ms <span class="text-slate-600">•</span> 55s ago</span>
+<!-- Mini Sparkline SVG -->
+<svg class="w-20 h-5 overflow-visible" fill="none" viewBox="0 0 80 20">
+<path d="M0 16 L 25 15 L 35 17 L 50 14 L 60 4 L 70 17 L 80 15" stroke="#3b82f6" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8"></path>
+</svg>
+</div>
+<div class="absolute bottom-0 left-0 right-0 h-0.5 bg-blue-500/40"></div>
+</div>
+<!-- Metric 2: INTERNET SPEED -->
+<div class="relative backdrop-blur-md bg-[#0f1422]/80 border border-cyan-500/20 rounded-lg p-4 flex flex-col justify-between overflow-hidden shadow-2xl shadow-cyan-950/20 hover:border-teal-400/50 transition">
+<div class="flex items-start justify-between">
+<span class="text-[11px] font-semibold tracking-wider text-slate-400 uppercase font-mono">Internet Speed</span>
+<div class="flex items-center space-x-1.5">
+<button class="px-2 py-0.5 text-[10px] font-mono font-medium rounded bg-emerald-950/80 text-emerald-400 border border-emerald-700/60 hover:bg-emerald-800/40 transition" onclick="triggerSpeedPulse()">
+              Test Now
+            </button>
+<div class="p-1 rounded bg-teal-500/10 text-teal-400 border border-teal-500/20">
+<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+<path d="M19 14l-7 7m0 0l-7-7m7 7V3" stroke-linecap="round" stroke-linejoin="round"></path>
+</svg>
+</div>
+</div>
+</div>
+<div class="my-2 flex items-baseline space-x-3">
+<span class="text-3xl font-bold text-white font-mono tracking-tight" id="val-net-speed">48.97 <span class="text-base font-normal text-slate-400">Mbps</span></span>
+</div>
+<div class="flex items-center justify-between pt-1">
+<span class="text-xs text-slate-400 font-mono">tested 3m ago <span class="text-slate-600">•</span> ↑ 9.73M</span>
+<!-- Mini Sparkline SVG -->
+<svg class="w-20 h-5 overflow-visible" fill="none" viewBox="0 0 80 20">
+<path d="M0 12 L 15 15 L 30 10 L 45 16 L 60 7 L 70 14 L 80 11" stroke="#10b981" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8"></path>
+</svg>
+</div>
+<div class="absolute bottom-0 left-0 right-0 h-0.5 bg-emerald-500/40"></div>
+</div>
+<!-- Metric 3: LIVE TRAFFIC -->
+<div class="relative backdrop-blur-md bg-[#0f1422]/80 border border-cyan-500/20 rounded-lg p-4 flex flex-col justify-between overflow-hidden shadow-2xl shadow-cyan-950/20 hover:border-purple-400/50 transition">
+<div class="flex items-start justify-between">
+<span class="text-[11px] font-semibold tracking-wider text-slate-400 uppercase font-mono">Live Traffic</span>
+<div class="p-1.5 rounded bg-purple-500/10 text-purple-400 border border-purple-500/20">
+<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+<path d="M5 10l7-7m0 0l7 7m-7-7v18" stroke-linecap="round" stroke-linejoin="round"></path>
+</svg>
+</div>
+</div>
+<div class="my-2 flex items-baseline space-x-3"><span class="text-3xl font-bold text-white font-mono tracking-tight">0.13 <span class="text-base font-normal text-slate-400">Mbps</span></span></div>
+<div class="flex items-center justify-between pt-1">
+<span class="text-xs text-amber-400/90 font-mono flex items-center"><svg class="w-3 h-3 mr-1 text-amber-500" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2L1 21h22L12 2zm0 4l7.53 13H4.47L12 6z"></path></svg>▲ Paused <span class="text-slate-600 mx-1">•</span> 6s ago</span>
+<!-- Mini Idle Sparkline SVG -->
+<svg class="w-16 h-4 opacity-40" fill="none" viewBox="0 0 60 10">
+<line stroke="#a855f7" stroke-dasharray="2 3" stroke-width="1.5" x1="0" x2="60" y1="8" y2="8"></line>
+</svg>
+</div>
+<div class="absolute bottom-0 left-0 right-0 h-0.5 bg-purple-500/40"></div>
+</div>
+<!-- Metric 4: PACKET LOSS -->
+<div class="relative backdrop-blur-md bg-[#0f1422]/80 border border-cyan-500/20 rounded-lg p-4 flex flex-col justify-between overflow-hidden shadow-2xl shadow-cyan-950/20 hover:border-rose-400/50 transition">
+<div class="flex items-start justify-between">
+<span class="text-[11px] font-semibold tracking-wider text-slate-400 uppercase font-mono">Packet Loss</span>
+<div class="p-1.5 rounded bg-rose-500/10 text-rose-400 border border-rose-500/20">
+<svg class="w-3.5 h-3.5 animate-pulse" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+<path d="M13 10V3L4 14h7v7l9-11h-7z" stroke-linecap="round" stroke-linejoin="round"></path>
+</svg>
+</div>
+</div>
+<div class="my-2 flex items-baseline space-x-3">
+<span class="text-3xl font-bold text-white font-mono tracking-tight" id="val-packet-loss">1.5%</span>
+</div>
+<div class="flex items-center justify-between pt-1">
+<span class="text-xs text-rose-400 font-mono">elevated <span class="text-slate-600">•</span> 55s ago</span>
+<!-- Mini Sparkline SVG with spike -->
+<svg class="w-20 h-5 overflow-visible" fill="none" viewBox="0 0 80 20">
+<path d="M0 18 L 40 18 L 50 18 L 60 5 L 68 18 L 80 18" stroke="#f43f5e" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8"></path>
+</svg>
+</div>
+<div class="absolute bottom-0 left-0 right-0 h-0.5 bg-rose-500/40"></div>
+</div>
+</section>
+<!-- END: TopMetricCards -->
+<!-- BEGIN: DashboardBodyGrid -->
+<main class="grid grid-cols-1 xl:grid-cols-12 gap-4 flex-1">
+<!-- LEFT & CENTER: Main Visualizer Charts (8 of 12 cols on desktop) -->
+<div class="xl:col-span-8 flex flex-col space-y-4">
+<!-- Row 1: Latency Chart & Internet Speed Test Chart -->
+<div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+<!-- Chart 1: Latency -->
+<div class="backdrop-blur-md bg-[#0f1422]/80 border border-cyan-500/20 rounded-lg p-4 flex flex-col justify-between relative shadow-2xl shadow-cyan-950/20 hover:border-cyan-400/40 transition">
+<div class="flex items-center justify-between mb-2">
+<div class="flex items-center space-x-2">
+<span class="w-2 h-2 rounded-full bg-blue-500"></span>
+<h3 class="text-sm font-semibold text-slate-200">Latency</h3>
+<span class="text-[10px] font-mono px-1.5 py-0.5 rounded bg-blue-950/60 border border-blue-800/40 text-blue-300">ICMP/TCP</span>
+</div>
+<div class="flex items-center space-x-2">
+<div class="flex items-center space-x-1.5 px-2 py-0.5 rounded bg-blue-950/60 border border-blue-800/40 text-[11px] font-mono text-blue-300">
+<svg class="w-3 h-3 animate-spin" fill="none" stroke="currentColor" style="animation-duration: 2600ms;" viewBox="0 0 24 24">
+<circle cx="12" cy="12" r="9" stroke-dasharray="14 14" stroke-width="2"></circle>
+</svg>
+<span class="">26 ms</span>
+</div>
+</div>
+</div>
+<div class="h-5 bg-[#0a0d16]/90 rounded border border-cyan-900/40 px-2 flex items-center justify-between text-[10px] font-mono text-slate-400 mb-2">
+<span class="text-blue-400">HOST</span>
+<div class="flex-1 mx-2 relative h-1 bg-slate-800/80 rounded-full overflow-hidden">
+<div class="absolute inset-y-0 w-8 bg-gradient-to-r from-transparent via-blue-400 to-transparent" style="animation: packet-dash 1.4s infinite linear;"></div>
+</div>
+<span class="text-emerald-400">EDGE GATEWAY</span>
+</div>
+<div class="relative w-full h-[210px] mt-1">
+<svg class="w-full h-full" preserveAspectRatio="none" viewBox="0 0 450 210">
+<line stroke="#1c2336" stroke-dasharray="3 3" stroke-width="1" x1="40" x2="440" y1="20" y2="20"></line>
+<line stroke="#1c2336" stroke-dasharray="3 3" stroke-width="1" x1="40" x2="440" y1="65" y2="65"></line>
+<line stroke="#1c2336" stroke-dasharray="3 3" stroke-width="1" x1="40" x2="440" y1="115" y2="115"></line>
+<line stroke="#1c2336" stroke-dasharray="3 3" stroke-width="1" x1="40" x2="440" y1="165" y2="165"></line>
+<line stroke="#1c2336" stroke-width="1" x1="40" x2="440" y1="190" y2="190"></line>
+<text fill="#52617d" font-family="JetBrains Mono" font-size="9" text-anchor="end" x="32" y="24">150.0</text>
+<text fill="#52617d" font-family="JetBrains Mono" font-size="9" text-anchor="end" x="32" y="69">100.0</text>
+<text fill="#52617d" font-family="JetBrains Mono" font-size="9" text-anchor="end" x="32" y="119">50.0</text>
+<text fill="#52617d" font-family="JetBrains Mono" font-size="9" text-anchor="end" x="32" y="169">20.0</text>
+<text fill="#52617d" font-family="JetBrains Mono" font-size="9" text-anchor="end" x="32" y="194">0.0</text>
+<defs>
+<linearGradient id="latencyGradFull" x1="0" x2="0" y1="0" y2="1">
+<stop offset="0%" stop-color="#3b82f6" stop-opacity="0.35"></stop>
+<stop offset="60%" stop-color="#3b82f6" stop-opacity="0.08"></stop>
+<stop offset="100%" stop-color="#3b82f6" stop-opacity="0.0"></stop>
+</linearGradient>
+</defs>
+<path d="M 40 176 L 60 174 L 85 178 L 115 152 L 130 174 L 170 174 L 200 172 L 230 140 L 245 165 L 260 176 L 280 174 L 295 45 L 310 176 L 330 174 L 440 174 L 440 190 L 40 190 Z" fill="url(#latencyGradFull)"></path>
+<path d="M 40 176 C 55 175, 65 174, 85 178 C 100 178, 110 152, 120 152 C 128 152, 132 174, 145 174 C 170 174, 185 174, 205 172 C 220 172, 225 140, 235 140 C 245 140, 250 168, 260 176 C 275 176, 285 125, 295 45 C 305 125, 310 176, 320 176 C 330 176, 370 174, 440 174" fill="none" id="latency-line" stroke="#3b82f6" stroke-linecap="round" stroke-width="2.4"></path>
+<circle cx="295" cy="45" fill="#60a5fa" r="4" stroke="#0e131f" stroke-width="2"></circle>
+<line stroke="#60a5fa" stroke-dasharray="2 2" stroke-width="1" x1="295" x2="295" y1="45" y2="190"></line>
+<text fill="#93c5fd" font-family="JetBrains Mono" font-size="9" font-weight="600" text-anchor="middle" x="295" y="36">142.1ms</text>
+</svg>
+</div>
+<div class="flex justify-between text-[9px] font-mono text-slate-500 pl-8 pr-1 mt-1 mb-2">
+<span class="">09:50:26</span>
+<span class="">09:56:30</span>
+<span class="">10:02:30</span>
+<span class="">10:08:30</span>
+<span class="">10:14:30</span>
+<span class="">10:20:30</span>
+<span class="">10:26:30</span>
+<span class="">10:32:30</span>
+</div>
+<div class="pt-2 border-t border-cyan-900/40 grid grid-cols-4 gap-1.5 text-center text-slate-400 font-mono text-[10px]">
+<div class="bg-[#0a0d16]/80 rounded px-1.5 py-1 border border-cyan-900/40"><span class="text-slate-500 block text-[9px]">MIN</span><span class="text-emerald-400 font-semibold">12.4 ms</span></div>
+<div class="bg-[#0a0d16]/80 rounded px-1.5 py-1 border border-cyan-900/40"><span class="text-slate-500 block text-[9px]">AVG</span><span class="text-blue-300 font-semibold">26.1 ms</span></div>
+<div class="bg-[#0a0d16]/80 rounded px-1.5 py-1 border border-cyan-900/40"><span class="text-slate-500 block text-[9px]">MAX</span><span class="text-rose-400 font-semibold">142.1 ms</span></div>
+<div class="bg-[#0a0d16]/80 rounded px-1.5 py-1 border border-cyan-900/40"><span class="text-slate-500 block text-[9px]">SLA &lt;50ms</span><span class="text-emerald-400 font-semibold">99.4%</span></div>
+</div>
+</div>
+<!-- Chart 2: Internet Speed Test -->
+<div class="backdrop-blur-md bg-[#0f1422]/80 border border-cyan-500/20 rounded-lg p-4 flex flex-col justify-between relative shadow-2xl shadow-cyan-950/20 hover:border-teal-400/40 transition">
+<div class="flex items-center justify-between mb-2">
+<div class="flex items-center space-x-2">
+<span class="w-2 h-2 rounded-full bg-emerald-400"></span>
+<h3 class="text-sm font-semibold text-slate-200">Internet Speed Test</h3>
+</div>
+<div class="flex items-center space-x-3 text-xs font-mono">
+<span class="flex items-center text-emerald-400 text-[11px]">
+<span class="w-2 h-2 rounded-full bg-emerald-400 mr-1.5"></span>
+Download (Mbps)
+</span>
+<span class="flex items-center text-purple-400 text-[11px]">
+<span class="w-2 h-2 rounded-full bg-purple-400 mr-1.5"></span>
+Upload (Mbps)
+</span>
+<span class="hidden sm:inline-block text-[11px] font-mono px-2 py-0.5 rounded bg-emerald-950/60 text-emerald-300 border border-emerald-800/40">↓ 48.97 ↑ 9.73</span>
+</div>
+</div>
+<div class="h-5 bg-[#0a0d16]/90 rounded border border-cyan-900/40 px-2 flex items-center justify-between text-[10px] font-mono mb-2">
+<div class="flex items-center space-x-1.5 text-emerald-400">
+<span class="">INFLOW</span>
+<span class="inline-block w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping"></span>
+</div>
+<div class="flex items-center space-x-3 text-slate-400"><span class="text-emerald-400/90 text-[10px]">48.97 Mbps &lt;&lt;&lt;</span><span class="text-purple-400/90 text-[10px]">&gt;&gt;&gt; 9.73 Mbps</span></div>
+<div class="flex items-center space-x-1.5 text-purple-400">
+<span class="">OUTFLOW</span>
+<span class="inline-block w-1.5 h-1.5 rounded-full bg-purple-400 animate-pulse"></span>
+</div>
+</div>
+<div class="relative w-full h-[210px] mt-1">
+<svg class="w-full h-full" preserveAspectRatio="none" viewBox="0 0 450 210">
+<defs>
+<linearGradient id="speedDownGrad" x1="0" x2="0" y1="0" y2="1">
+<stop offset="0%" stop-color="#10b981" stop-opacity="0.25"></stop>
+<stop offset="100%" stop-color="#10b981" stop-opacity="0.0"></stop>
+</linearGradient>
+<linearGradient id="speedUpGrad" x1="0" x2="0" y1="0" y2="1">
+<stop offset="0%" stop-color="#a855f7" stop-opacity="0.2"></stop>
+<stop offset="100%" stop-color="#a855f7" stop-opacity="0.0"></stop>
+</linearGradient>
+</defs>
+<line stroke="#1c2336" stroke-dasharray="3 3" stroke-width="1" x1="40" x2="440" y1="20" y2="20"></line>
+<line stroke="#1c2336" stroke-dasharray="3 3" stroke-width="1" x1="40" x2="440" y1="65" y2="65"></line>
+<line stroke="#1c2336" stroke-dasharray="3 3" stroke-width="1" x1="40" x2="440" y1="110" y2="110"></line>
+<line stroke="#1c2336" stroke-dasharray="3 3" stroke-width="1" x1="40" x2="440" y1="155" y2="155"></line>
+<line stroke="#1c2336" stroke-width="1" x1="40" x2="440" y1="190" y2="190"></line>
+<text fill="#52617d" font-family="JetBrains Mono" font-size="9" text-anchor="end" x="35" y="24">200.00</text>
+<text fill="#52617d" font-family="JetBrains Mono" font-size="9" text-anchor="end" x="35" y="69">150.00</text>
+<text fill="#52617d" font-family="JetBrains Mono" font-size="9" text-anchor="end" x="35" y="114">100.00</text>
+<text fill="#52617d" font-family="JetBrains Mono" font-size="9" text-anchor="end" x="35" y="159">50.00</text>
+<text fill="#52617d" font-family="JetBrains Mono" font-size="9" text-anchor="end" x="35" y="194">0.00</text>
+<path d="M 50 102 L 65 125 L 95 108 L 115 116 L 135 112 L 155 84 L 180 120 L 210 72 L 235 58 L 255 72 L 275 174 L 305 94 L 335 100 L 360 178 L 380 144 L 400 132 L 400 190 L 50 190 Z" fill="url(#speedDownGrad)"></path>
+<path d="M 50 174 L 65 178 L 95 170 L 115 168 L 135 178 L 155 180 L 180 178 L 210 162 L 235 132 L 255 132 L 275 170 L 305 168 L 335 150 L 360 182 L 380 180 L 400 174 L 400 190 L 50 190 Z" fill="url(#speedUpGrad)"></path>
+<path d="M 50 102 L 65 125 L 95 108 L 115 116 L 135 112 L 155 84 L 180 120 L 210 72 L 235 58 L 255 72 L 275 174 L 305 94 L 335 100 L 360 178 L 380 144 L 400 132" fill="none" stroke="#10b981" stroke-linejoin="round" stroke-width="2.2"></path>
+<path d="M 50 174 L 65 178 L 95 170 L 115 168 L 135 178 L 155 180 L 180 178 L 210 162 L 235 132 L 255 132 L 275 170 L 305 168 L 335 150 L 360 182 L 380 180 L 400 174" fill="none" stroke="#a855f7" stroke-linejoin="round" stroke-width="2.2"></path>
+<circle cx="50" cy="102" fill="#34d399" r="3"></circle>
+<circle cx="65" cy="125" fill="#34d399" r="3"></circle>
+<circle cx="95" cy="108" fill="#34d399" r="3"></circle>
+<circle cx="115" cy="116" fill="#34d399" r="3"></circle>
+<circle cx="135" cy="112" fill="#34d399" r="3"></circle>
+<circle cx="155" cy="84" fill="#34d399" r="3"></circle>
+<circle cx="180" cy="120" fill="#34d399" r="3"></circle>
+<circle cx="210" cy="72" fill="#34d399" r="3"></circle>
+<circle cx="235" cy="58" fill="#6ee7b7" r="3.5" stroke="#111624" stroke-width="1.5"></circle>
+<circle cx="255" cy="72" fill="#34d399" r="3"></circle>
+<circle cx="275" cy="174" fill="#34d399" r="3"></circle>
+<circle cx="305" cy="94" fill="#34d399" r="3"></circle>
+<circle cx="335" cy="100" fill="#34d399" r="3"></circle>
+<circle cx="360" cy="178" fill="#34d399" r="3"></circle>
+<circle cx="380" cy="144" fill="#34d399" r="3"></circle>
+<circle cx="400" cy="132" fill="#34d399" r="3"></circle>
+<circle cx="50" cy="174" fill="#c084fc" r="3"></circle>
+<circle cx="65" cy="178" fill="#c084fc" r="3"></circle>
+<circle cx="95" cy="170" fill="#c084fc" r="3"></circle>
+<circle cx="115" cy="168" fill="#c084fc" r="3"></circle>
+<circle cx="135" cy="178" fill="#c084fc" r="3"></circle>
+<circle cx="155" cy="180" fill="#c084fc" r="3"></circle>
+<circle cx="180" cy="178" fill="#c084fc" r="3"></circle>
+<circle cx="210" cy="162" fill="#c084fc" r="3"></circle>
+<circle cx="235" cy="132" fill="#e9d5ff" r="3.5" stroke="#111624" stroke-width="1.5"></circle>
+<circle cx="255" cy="132" fill="#c084fc" r="3"></circle>
+<circle cx="275" cy="170" fill="#c084fc" r="3"></circle>
+<circle cx="305" cy="168" fill="#c084fc" r="3"></circle>
+<circle cx="335" cy="150" fill="#c084fc" r="3"></circle>
+<circle cx="360" cy="182" fill="#c084fc" r="3"></circle>
+<circle cx="380" cy="180" fill="#c084fc" r="3"></circle>
+<circle cx="400" cy="174" fill="#c084fc" r="3"></circle>
+</svg>
+</div>
+<div class="flex justify-between text-[9px] font-mono text-slate-500 pl-8 pr-1 mt-1 mb-2">
+<span class="">09:50 AM</span>
+<span class="">09:52 AM</span>
+<span class="">09:55 AM</span>
+<span class="">10:05 AM</span>
+<span class="">10:20 AM</span>
+<span class="">10:25 AM</span>
+<span class="">10:35 AM</span>
+</div>
+<div class="pt-2 border-t border-cyan-900/40 grid grid-cols-4 gap-1.5 text-center text-slate-400 font-mono text-[10px]">
+<div class="bg-[#0a0d16]/80 rounded px-1.5 py-1 border border-cyan-900/40"><span class="text-slate-500 block text-[9px]">ISP</span><span class="text-slate-200 font-medium truncate">XFINITY</span></div>
+<div class="bg-[#0a0d16]/80 rounded px-1.5 py-1 border border-cyan-900/40"><span class="text-slate-500 block text-[9px]">BUFFERBLOAT</span><span class="text-emerald-400 font-semibold">Grade A+</span></div>
+<div class="bg-[#0a0d16]/80 rounded px-1.5 py-1 border border-cyan-900/40"><span class="text-slate-500 block text-[9px]">PEAK RATE</span><span class="text-teal-400 font-semibold">182.4 Mbps</span></div>
+<div class="bg-[#0a0d16]/80 rounded px-1.5 py-1 border border-cyan-900/40"><span class="text-slate-500 block text-[9px]">TEST SERVER</span><span class="text-purple-300 font-semibold">San Jose #4</span></div>
+</div>
+</div>
+</div>
+<!-- Row 2: Packet Loss & Jitter + DNS Resolution -->
+<div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+<!-- Chart 3: Packet Loss & Jitter -->
+<div class="backdrop-blur-md bg-[#0f1422]/80 border border-cyan-500/20 rounded-lg p-4 flex flex-col justify-between relative shadow-2xl shadow-cyan-950/20 hover:border-rose-400/40 transition">
+<div class="flex items-center justify-between mb-2">
+<div class="flex items-center space-x-2">
+<span class="w-2 h-2 rounded-full bg-rose-500"></span>
+<h3 class="text-sm font-semibold text-slate-200">Packet Loss &amp; Jitter</h3>
+</div>
+<div class="flex items-center space-x-3 text-xs font-mono">
+<span class="flex items-center text-rose-400 text-[11px]">
+<span class="w-2 h-2 rounded-full bg-rose-500 mr-1.5"></span>
+Loss (%)
+</span>
+<span class="flex items-center text-amber-400 text-[11px]">
+<span class="w-2 h-2 rounded-full bg-amber-400 mr-1.5"></span>
+Jitter (ms)
+</span>
+<span class="text-[11px] font-mono px-2 py-0.5 rounded bg-rose-950/60 text-rose-300 border border-rose-800/40">
+1.5% • 17.2 ms
+</span>
+</div>
+</div>
+<div class="h-5 bg-[#0a0d16]/90 rounded border border-cyan-900/40 px-2 flex items-center justify-between text-[10px] font-mono mb-2">
+<span class="text-rose-400 text-[10px]">INTEGRITY: 98.5%</span>
+<div class="flex items-center space-x-1">
+<span class="w-1.5 h-1.5 bg-emerald-400 rounded-xs"></span>
+<span class="w-1.5 h-1.5 bg-emerald-400 rounded-xs"></span>
+<span class="w-1.5 h-1.5 bg-emerald-400 rounded-xs"></span>
+<span class="w-1.5 h-1.5 bg-rose-500 rounded-xs animate-ping" title="Dropped Packet"></span>
+<span class="w-1.5 h-1.5 bg-emerald-400 rounded-xs"></span>
+<span class="w-1.5 h-1.5 bg-emerald-400 rounded-xs"></span>
+<span class="w-1.5 h-1.5 bg-emerald-400 rounded-xs"></span>
+<span class="w-1.5 h-1.5 bg-emerald-400 rounded-xs"></span>
+<span class="w-1.5 h-1.5 bg-amber-400 rounded-xs"></span>
+<span class="w-1.5 h-1.5 bg-emerald-400 rounded-xs"></span>
+</div>
+<span class="text-amber-400 text-[10px]">JITTER: ±2.4ms</span>
+</div>
+<div class="relative w-full h-[210px] mt-1">
+<svg class="w-full h-full" preserveAspectRatio="none" viewBox="0 0 450 210">
+<defs>
+<linearGradient id="lossGradFull" x1="0" x2="0" y1="0" y2="1">
+<stop offset="0%" stop-color="#f43f5e" stop-opacity="0.3"></stop>
+<stop offset="100%" stop-color="#f43f5e" stop-opacity="0.0"></stop>
+</linearGradient>
+</defs>
+<line stroke="#1c2336" stroke-dasharray="3 3" stroke-width="1" x1="40" x2="410" y1="20" y2="20"></line>
+<line stroke="#1c2336" stroke-dasharray="3 3" stroke-width="1" x1="40" x2="410" y1="75" y2="75"></line>
+<line stroke="#1c2336" stroke-dasharray="3 3" stroke-width="1" x1="40" x2="410" y1="135" y2="135"></line>
+<line stroke="#1c2336" stroke-width="1" x1="40" x2="410" y1="190" y2="190"></line>
+<text fill="#f43f5e" font-family="JetBrains Mono" font-size="9" text-anchor="end" x="34" y="24">15.0</text>
+<text fill="#f43f5e" font-family="JetBrains Mono" font-size="9" text-anchor="end" x="34" y="79">10.0</text>
+<text fill="#f43f5e" font-family="JetBrains Mono" font-size="9" text-anchor="end" x="34" y="139">5.0</text>
+<text fill="#f43f5e" font-family="JetBrains Mono" font-size="9" text-anchor="end" x="34" y="193">0.0</text>
+<text fill="#f43f5e" font-family="JetBrains Mono" font-size="9" text-anchor="middle" transform="rotate(-90 14 105)" x="14" y="105">Loss %</text>
+<text fill="#f59e0b" font-family="JetBrains Mono" font-size="9" text-anchor="start" x="416" y="24">150.0</text>
+<text fill="#f59e0b" font-family="JetBrains Mono" font-size="9" text-anchor="start" x="416" y="79">100.0</text>
+<text fill="#f59e0b" font-family="JetBrains Mono" font-size="9" text-anchor="start" x="416" y="139">50.0</text>
+<text fill="#f59e0b" font-family="JetBrains Mono" font-size="9" text-anchor="start" x="416" y="193">0.0</text>
+<text fill="#f59e0b" font-family="JetBrains Mono" font-size="9" text-anchor="middle" transform="rotate(90 438 105)" x="438" y="105">Jitter ms</text>
+<path d="M 40 190 L 230 190 L 245 178 L 260 166 L 270 34 L 282 184 L 300 190 L 410 190 Z" fill="url(#lossGradFull)"></path>
+<path d="M 40 190 L 230 190 L 245 178 L 260 166 L 270 34 L 282 184 L 300 190 L 410 190" fill="none" stroke="#f43f5e" stroke-linejoin="round" stroke-width="2.2"></path>
+<path d="M 40 180 L 50 188 L 65 188 L 90 160 L 110 188 L 150 188 L 170 178 L 190 188 L 210 178 L 230 160 L 250 178 L 260 188 L 280 148 L 300 22 L 310 188 L 410 188" fill="none" stroke="#f59e0b" stroke-linejoin="round" stroke-width="2.2"></path>
+<circle cx="270" cy="34" fill="#f43f5e" r="3.5"></circle>
+<circle cx="300" cy="22" fill="#fbbf24" r="3.5"></circle>
+<line stroke="#f43f5e" stroke-dasharray="2 2" stroke-width="1" x1="270" x2="270" y1="34" y2="190"></line>
+<text fill="#fca5a5" font-family="JetBrains Mono" font-size="8.5" text-anchor="middle" x="270" y="26">14.2%</text>
+<text fill="#fde68a" font-family="JetBrains Mono" font-size="8.5" text-anchor="middle" x="302" y="15">148ms</text>
+</svg>
+</div>
+<div class="flex justify-between text-[9px] font-mono text-slate-500 pl-8 pr-8 mt-1 mb-2">
+<span class="">09:50 AM</span>
+<span class="">09:52 AM</span>
+<span class="">09:55 AM</span>
+<span class="">10:05 AM</span>
+<span class="">10:20 AM</span>
+<span class="">10:25 AM</span>
+<span class="">10:35 AM</span>
+</div>
+<div class="pt-2 border-t border-cyan-900/40 grid grid-cols-4 gap-1.5 text-center text-slate-400 font-mono text-[10px]">
+<div class="bg-[#0a0d16]/80 rounded px-1.5 py-1 border border-cyan-900/40"><span class="text-slate-500 block text-[9px]">DROPPED</span><span class="text-rose-400 font-semibold">18 pkts</span></div>
+<div class="bg-[#0a0d16]/80 rounded px-1.5 py-1 border border-cyan-900/40"><span class="text-slate-500 block text-[9px]">RETRANSMIT</span><span class="text-emerald-400 font-semibold">0.21%</span></div>
+<div class="bg-[#0a0d16]/80 rounded px-1.5 py-1 border border-cyan-900/40"><span class="text-slate-500 block text-[9px]">BURST LOSS</span><span class="text-slate-200 font-semibold">0 (None)</span></div>
+<div class="bg-[#0a0d16]/80 rounded px-1.5 py-1 border border-cyan-900/40"><span class="text-slate-500 block text-[9px]">DEV JITTER</span><span class="text-amber-400 font-semibold">±1.8 ms</span></div>
+</div>
+</div>
+<!-- Chart 4: DNS Resolution -->
+<div class="backdrop-blur-md bg-[#0f1422]/80 border border-cyan-500/20 rounded-lg p-4 flex flex-col justify-between relative shadow-2xl shadow-cyan-950/20 hover:border-purple-400/40 transition">
+<div class="flex items-center justify-between mb-2">
+<div class="flex items-center space-x-2">
+<span class="w-2 h-2 rounded-full bg-purple-500"></span>
+<h3 class="text-sm font-semibold text-slate-200">DNS Resolution</h3>
+</div>
+<div class="flex items-center space-x-2">
+<span class="inline-flex items-center text-xs font-mono px-2 py-0.5 rounded bg-purple-950/60 text-purple-300 border border-purple-800/40">
+<svg class="w-3 h-3 mr-1 text-purple-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+<rect height="8" rx="2" width="20" x="2" y="2"></rect>
+<rect height="8" rx="2" width="20" x="2" y="14"></rect>
+<line x1="6" x2="6.01" y1="6" y2="6"></line>
+<line x1="6" x2="6.01" y1="18" y2="18"></line>
+</svg>
+46.7 ms
+</span>
+</div>
+</div>
+<div class="h-5 bg-[#0a0d16]/90 rounded border border-cyan-900/40 px-2 flex items-center justify-between text-[10px] font-mono text-slate-400 mb-2">
+<span class="text-purple-400">DNS QUERY</span>
+<div class="flex items-center space-x-2">
+<span class="text-slate-300">1.1.1.1: 46.8ms</span>
+<span class="text-slate-600">vs</span>
+<span class="text-teal-400">8.8.8.8: 42.3ms</span>
+</div>
+<span class="text-emerald-400">RESOLVED</span>
+</div>
+<div class="relative w-full h-[210px] mt-1">
+<svg class="w-full h-full" preserveAspectRatio="none" viewBox="0 0 450 210">
+<line stroke="#1c2336" stroke-dasharray="3 3" stroke-width="1" x1="40" x2="440" y1="20" y2="20"></line>
+<line stroke="#1c2336" stroke-dasharray="3 3" stroke-width="1" x1="40" x2="440" y1="65" y2="65"></line>
+<line stroke="#1c2336" stroke-dasharray="3 3" stroke-width="1" x1="40" x2="440" y1="110" y2="110"></line>
+<line stroke="#1c2336" stroke-dasharray="3 3" stroke-width="1" x1="40" x2="440" y1="150" y2="150"></line>
+<line stroke="#1c2336" stroke-width="1" x1="40" x2="440" y1="190" y2="190"></line>
+<text fill="#52617d" font-family="JetBrains Mono" font-size="9" text-anchor="end" x="35" y="24">300.0</text>
+<text fill="#52617d" font-family="JetBrains Mono" font-size="9" text-anchor="end" x="35" y="69">200.0</text>
+<text fill="#52617d" font-family="JetBrains Mono" font-size="9" text-anchor="end" x="35" y="114">100.0</text>
+<text fill="#52617d" font-family="JetBrains Mono" font-size="9" text-anchor="end" x="35" y="154">50.0</text>
+<text fill="#52617d" font-family="JetBrains Mono" font-size="9" text-anchor="end" x="35" y="194">0.0</text>
+<defs>
+<linearGradient id="dnsGradFull" x1="0" x2="0" y1="0" y2="1">
+<stop offset="0%" stop-color="#a855f7" stop-opacity="0.3"></stop>
+<stop offset="100%" stop-color="#a855f7" stop-opacity="0.0"></stop>
+</linearGradient>
+</defs>
+<path d="M 40 190 L 50 190 L 65 125 L 75 180 L 95 185 L 155 185 L 190 176 L 230 185 L 260 26 L 270 142 L 285 184 L 310 160 L 330 178 L 350 190 L 440 190 Z" fill="url(#dnsGradFull)"></path>
+<path d="M 40 190 C 45 190, 55 125, 65 125 C 75 125, 75 180, 90 183 C 115 185, 175 185, 190 176 C 205 166, 220 185, 235 185 C 248 185, 255 26, 262 26 C 268 26, 275 142, 280 142 C 290 142, 295 184, 305 184 C 315 184, 320 160, 330 160 C 340 160, 350 190, 360 190 L 440 190" fill="none" stroke="#a855f7" stroke-linecap="round" stroke-width="2.4"></path>
+<circle cx="262" cy="26" fill="#c084fc" r="4" stroke="#0e131f" stroke-width="1.5"></circle>
+<line stroke="#c084fc" stroke-dasharray="2 2" stroke-width="1" x1="262" x2="262" y1="26" y2="190"></line>
+<text fill="#d8b4fe" font-family="JetBrains Mono" font-size="8.5" text-anchor="middle" x="262" y="18">294ms</text>
+</svg>
+</div>
+<div class="flex justify-between text-[9px] font-mono text-slate-500 pl-8 pr-1 mt-1 mb-2">
+<span class="">09:50 AM</span>
+<span class="">09:52 AM</span>
+<span class="">09:55 AM</span>
+<span class="">10:05 AM</span>
+<span class="">10:20 AM</span>
+<span class="">10:25 AM</span>
+<span class="">10:35 AM</span>
+</div>
+<div class="pt-2 border-t border-cyan-900/40 grid grid-cols-4 gap-1.5 text-center text-slate-400 font-mono text-[10px]">
+<div class="bg-[#0a0d16]/80 rounded px-1.5 py-1 border border-cyan-900/40"><span class="text-slate-500 block text-[9px]">CACHE HIT</span><span class="text-emerald-400 font-semibold">94.2%</span></div>
+<div class="bg-[#0a0d16]/80 rounded px-1.5 py-1 border border-cyan-900/40"><span class="text-slate-500 block text-[9px]">CLOUDFLARE</span><span class="text-purple-300 font-semibold">46.8 ms</span></div>
+<div class="bg-[#0a0d16]/80 rounded px-1.5 py-1 border border-cyan-900/40"><span class="text-slate-500 block text-[9px]">GOOGLE</span><span class="text-teal-400 font-semibold">42.3 ms</span></div>
+<div class="bg-[#0a0d16]/80 rounded px-1.5 py-1 border border-cyan-900/40"><span class="text-slate-500 block text-[9px]">QUAD9</span><span class="text-blue-300 font-semibold">51.0 ms</span></div>
+</div>
+</div>
+</div>
+</div>
+<!-- RIGHT SIDEBAR (4 Panels: Connectivity, DNS Lookups, WiFi Signal, 24h Summary) (4 of 12 cols on desktop) -->
+<div class="xl:col-span-4 flex flex-col space-y-4"><!-- PANEL 1: CONNECTION HEALTH & DIAGNOSIS --><div class="backdrop-blur-md bg-[#0f1422]/80 border border-cyan-500/20 rounded-lg p-3.5 shadow-2xl shadow-cyan-950/20 hover:border-cyan-400/40 transition"><div class="flex items-center justify-between pb-2 mb-2 border-b border-cyan-900/30"><div class="flex items-center space-x-2"><svg class="w-3.5 h-3.5 text-teal-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" stroke-linecap="round" stroke-linejoin="round"></path></svg><h4 class="text-xs font-semibold text-slate-200 uppercase tracking-wider font-mono">Connection Health</h4></div><span class="text-[10px] font-mono px-2 py-0.5 rounded bg-cyan-950/80 border border-cyan-500/40 text-cyan-300 font-semibold">85% CONF</span></div><div class="flex items-center space-x-3.5 my-2"><div class="relative flex items-center justify-center shrink-0"><svg class="w-16 h-16 transform -rotate-90" viewBox="0 0 64 64"><circle cx="32" cy="32" fill="none" r="26" stroke="#1e2638" stroke-width="4.5"></circle><circle cx="32" cy="32" fill="none" r="26" stroke="#f59e0b" stroke-dasharray="163.3" stroke-dashoffset="28" stroke-linecap="round" stroke-width="4.5"></circle></svg><div class="absolute flex flex-col items-center justify-center"><span class="text-base font-bold font-mono text-amber-400 leading-none">83</span><span class="text-[8px] font-mono text-amber-400/90 font-semibold tracking-wide uppercase mt-0.5">FAIR</span></div></div><div class="flex-1"><div class="text-xs font-semibold text-amber-400 font-sans leading-tight mb-1">Likely ISP / upstream routing issue</div><p class="text-[10px] text-slate-400 leading-relaxed font-sans">Local gateway connection is optimal, but external targets exhibit elevated latency, jitter, or packet loss.</p></div></div><div class="grid grid-cols-2 gap-1.5 mt-2.5 pt-2 border-t border-cyan-900/30 text-[10px] font-mono"><div class="flex items-center justify-between p-1.5 rounded bg-[#0b101c]/70 border border-cyan-900/30"><span class="text-slate-400">Latency</span><span class="px-1.5 py-0.2 rounded bg-emerald-950/80 text-emerald-400 border border-emerald-700/50 font-semibold text-[9px]">GOOD</span></div><div class="flex items-center justify-between p-1.5 rounded bg-[#0b101c]/70 border border-cyan-900/30"><span class="text-slate-400">Loss</span><span class="px-1.5 py-0.2 rounded bg-amber-950/80 text-amber-400 border border-amber-800/50 font-semibold text-[9px]">FAIR</span></div><div class="flex items-center justify-between p-1.5 rounded bg-[#0b101c]/70 border border-cyan-900/30"><span class="text-slate-400">Jitter</span><span class="px-1.5 py-0.2 rounded bg-amber-950/80 text-amber-400 border border-amber-800/50 font-semibold text-[9px]">WARNING</span></div><div class="flex items-center justify-between p-1.5 rounded bg-[#0b101c]/70 border border-cyan-900/30"><span class="text-slate-400">DNS</span><span class="px-1.5 py-0.2 rounded bg-amber-950/80 text-amber-400 border border-amber-800/50 font-semibold text-[9px]">FAIR</span></div><div class="flex items-center justify-between p-1.5 rounded bg-[#0b101c]/70 border border-cyan-900/30"><span class="text-slate-400">Uptime</span><span class="px-1.5 py-0.2 rounded bg-emerald-950/80 text-emerald-400 border border-emerald-700/50 font-semibold text-[9px]">GOOD</span></div><div class="flex items-center justify-between p-1.5 rounded bg-[#0b101c]/70 border border-cyan-900/30"><span class="text-slate-400">Speed</span><span class="px-1.5 py-0.2 rounded bg-emerald-950/80 text-emerald-400 border border-emerald-700/50 font-semibold text-[9px]">GOOD</span></div></div></div><!-- PANEL 2: HOTSPOT MONITOR --><div class="backdrop-blur-md bg-[#0f1422]/80 border border-cyan-500/20 rounded-lg p-3.5 shadow-2xl shadow-cyan-950/20 hover:border-cyan-400/40 transition"><div class="flex items-center justify-between pb-2 mb-2 border-b border-cyan-900/30"><div class="flex items-center space-x-2"><svg class="w-3.5 h-3.5 text-cyan-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M12 18h.01M5.636 12.364a9 9 0 0112.728 0M8.464 15.172a5 5 0 017.072 0" stroke-linecap="round" stroke-linejoin="round"></path></svg><h4 class="text-xs font-semibold text-slate-200 uppercase tracking-wider font-mono">Hotspot Monitor</h4></div><span class="text-[10px] font-mono px-2 py-0.5 rounded bg-slate-800/90 text-slate-400 border border-slate-700">HOTSPOT INACTIVE</span></div><div class="py-3 flex flex-col items-center justify-center text-center"><div class="w-9 h-9 rounded-full bg-slate-800/50 border border-slate-700/60 flex items-center justify-center text-slate-500 mb-2"><svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle><line x1="4.93" x2="19.07" y1="4.93" y2="19.07"></line></svg></div><div class="text-xs font-medium text-slate-300 font-sans">Hotspot Inactive</div><div class="text-[10px] text-slate-500 max-w-xs mt-1 font-sans">Turn on your hotspot to monitor connected devices and bandwidth.</div></div></div><!-- PANEL 3: LIVE INTERFACE TRAFFIC --><div class="backdrop-blur-md bg-[#0f1422]/80 border border-cyan-500/20 rounded-lg p-3.5 shadow-2xl shadow-cyan-950/20 hover:border-cyan-400/40 transition"><div class="flex items-center justify-between pb-2 mb-2 border-b border-cyan-900/30"><div class="flex items-center space-x-2"><svg class="w-3.5 h-3.5 text-blue-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M13 10V3L4 14h7v7l9-11h-7z" stroke-linecap="round" stroke-linejoin="round"></path></svg><h4 class="text-xs font-semibold text-slate-200 uppercase tracking-wider font-mono">Live Interface Traffic</h4></div><span class="text-[10px] font-mono text-cyan-400 font-medium">Wi-Fi</span></div><div class="space-y-2 text-xs font-mono"><div class="flex justify-between items-center py-0.5"><span class="text-slate-400 font-sans flex items-center"><span class="text-emerald-400 mr-1.5 font-bold">↓</span> Live Inbound (Rx)</span><span class="text-slate-200 font-semibold">130 Kbps</span></div><div class="flex justify-between items-center py-0.5"><span class="text-slate-400 font-sans flex items-center"><span class="text-purple-400 mr-1.5 font-bold">↑</span> Live Outbound (Tx)</span><span class="text-slate-200 font-semibold">160 Kbps</span></div><div class="mt-2 pt-2 border-t border-cyan-900/30 flex justify-between items-center text-[10px]"><span class="text-amber-400/90 font-mono flex items-center"><svg class="w-3 h-3 mr-1 text-amber-500" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2L1 21h22L12 2zm0 4l7.53 13H4.47L12 6z"></path></svg>▲ Paused (6s ago)</span><span class="text-slate-400 font-mono">16.3 KB/s</span></div></div></div><!-- PANEL 4: APPLICATION TRAFFIC --><div class="backdrop-blur-md bg-[#0f1422]/80 border border-cyan-500/20 rounded-lg p-3.5 shadow-2xl shadow-cyan-950/20 flex-1 flex flex-col justify-between hover:border-cyan-400/40 transition"><div class="flex items-center justify-between pb-2 mb-2 border-b border-cyan-900/30"><div class="flex items-center space-x-2"><svg class="w-3.5 h-3.5 text-slate-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect height="18" rx="2" width="18" x="3" y="3"></rect><line x1="3" x2="21" y1="9" y2="9"></line><line x1="9" x2="9" y1="21" y2="9"></line></svg><h4 class="text-xs font-semibold text-slate-200 uppercase tracking-wider font-mono">Application Traffic</h4></div><button class="text-slate-500 hover:text-slate-300"><svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M19 9l-7 7-7-7" stroke-width="2"></path></svg></button></div><div class="grid grid-cols-12 text-[10px] font-mono text-slate-500 px-1 mb-1"><span class="col-span-6">APPLICATION</span><span class="col-span-2 text-right">↓ DOWN</span><span class="col-span-2 text-right">↑ UP</span><span class="col-span-2 text-right">TOTAL</span></div><div class="space-y-1.5 text-xs font-mono"><div class="grid grid-cols-12 items-center p-1.5 rounded bg-[#0b101c]/60 border border-transparent hover:border-cyan-500/30 transition"><div class="col-span-6 overflow-hidden pr-1"><div class="text-slate-200 font-medium font-sans truncate text-[11px]">Google Chrome</div><div class="text-[9px] text-slate-500 truncate">Google ... PID 11652 ...</div></div><div class="col-span-2 text-right text-emerald-400 text-[11px]">1.75</div><div class="col-span-2 text-right text-purple-400 text-[11px]">0.30</div><div class="col-span-2 text-right text-slate-200 font-semibold text-[11px]">2.05</div></div><div class="w-full bg-slate-800/90 h-1 rounded-full overflow-hidden mt-1"><div class="bg-gradient-to-r from-emerald-400 to-purple-400 h-full rounded-full" style="width: 68%;"></div></div></div><div class="mt-4 pt-3 border-t border-cyan-900/40 flex items-center justify-between"><span class="text-[10px] uppercase font-mono text-slate-400">Live Simulation:</span><div class="inline-flex rounded-md p-0.5 bg-[#0a0d16]/90 border border-cyan-500/30 text-[10px] font-mono shadow-inner"><button class="px-2 py-0.5 rounded text-teal-400 bg-teal-950/80 border border-teal-500/40 font-semibold" id="btn-scen-nominal" onclick="setScenario('nominal')">Nominal</button><button class="px-2 py-0.5 rounded text-slate-400 hover:text-slate-200" id="btn-scen-surge" onclick="setScenario('surge')">Surge</button><button class="px-2 py-0.5 rounded text-slate-400 hover:text-slate-200" id="btn-scen-loss" onclick="setScenario('loss')">Loss Spike</button></div></div></div></div>
+</main>
+<!-- END: DashboardBodyGrid -->
+<!-- BEGIN: Footer -->
+<footer class="pt-3 pb-2 border-t border-cyan-500/20 backdrop-blur-md bg-[#0a0e17]/70 px-4 rounded-lg flex flex-wrap justify-between items-center text-[11px] font-mono text-slate-400 shadow-lg shadow-cyan-950/20">
+<div class="flex items-center space-x-4">
+<span class="">Node: <span class="text-cyan-300">klu-edge-ap02</span></span>
+<span class="">Local IP: <span class="text-slate-300">10.2.0.142</span></span>
+<span class="">Public IP: <span class="text-slate-300">103.21.244.18</span></span>
+</div>
+<div class="flex items-center space-x-2 mt-2 sm:mt-0">
+<span class="w-2 h-2 rounded-full bg-teal-400 animate-ping"></span>
+<span class="text-emerald-400 font-medium">Continuous telemetry active</span>
+</div>
+</footer>
+<!-- END: Footer -->
+</div>
+<!-- END: MainContainer -->
+<!-- JavaScript: Background Network Topology Canvas Animation -->
+<script data-purpose="background-mesh">
+    (function initTopologyMesh() {
+      const canvas = document.getElementById('bg-topology');
+      if (!canvas) return;
+      const ctx = canvas.getContext('2d');
+      let width, height;
+      let nodes = [];
+      const nodeCount = 48;
+
+      function resize() {
+        width = canvas.width = window.innerWidth;
+        height = canvas.height = window.innerHeight;
+      }
+      window.addEventListener('resize', resize);
+      resize();
+
+      for (let i = 0; i < nodeCount; i++) {
+        nodes.push({
+          x: Math.random() * width,
+          y: Math.random() * height,
+          vx: (Math.random() - 0.5) * 0.45,
+          vy: (Math.random() - 0.5) * 0.45,
+          radius: Math.random() * 2.2 + 1.2,
+          packetProg: Math.random(),
+          colorHue: Math.random() > 0.4 ? 188 : 260
+        });
+      }
+
+      function draw() {
+        ctx.clearRect(0, 0, width, height);
+
+        // Update and draw connections
+        for (let i = 0; i < nodes.length; i++) {
+          const n1 = nodes[i];
+          n1.x += n1.vx;
+          n1.y += n1.vy;
+
+          if (n1.x < 0 || n1.x > width) n1.vx *= -1;
+          if (n1.y < 0 || n1.y > height) n1.vy *= -1;
+
+          for (let j = i + 1; j < nodes.length; j++) {
+            const n2 = nodes[j];
+            const dx = n1.x - n2.x;
+            const dy = n1.y - n2.y;
+            const dist = Math.sqrt(dx * dx + dy * dy);
+
+            if (dist < 165) {
+              const alpha = (1 - dist / 165) * 0.35;
+              ctx.strokeStyle = `rgba(6, 182, 212, ${alpha})`;
+              ctx.lineWidth = 1;
+              ctx.beginPath();
+              ctx.moveTo(n1.x, n1.y);
+              ctx.lineTo(n2.x, n2.y);
+              ctx.stroke();
+
+              // Glowing packet pulse moving along fiber edge
+              if (i % 2 === 0) {
+                n1.packetProg += 0.0035;
+                if (n1.packetProg > 1) n1.packetProg = 0;
+                const px = n1.x + (n2.x - n1.x) * n1.packetProg;
+                const py = n1.y + (n2.y - n1.y) * n1.packetProg;
+                ctx.fillStyle = 'rgba(76, 215, 246, 0.85)';
+                ctx.shadowBlur = 8;
+                ctx.shadowColor = '#06b6d4';
+                ctx.beginPath();
+                ctx.arc(px, py, 1.8, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.shadowBlur = 0;
+              }
+            }
+          }
+
+          // Draw node
+          ctx.fillStyle = n1.colorHue === 188 ? 'rgba(76, 215, 246, 0.65)' : 'rgba(189, 194, 255, 0.55)';
+          ctx.beginPath();
+          ctx.arc(n1.x, n1.y, n1.radius, 0, Math.PI * 2);
+          ctx.fill();
+        }
+
+        requestAnimationFrame(draw);
+      }
+
+      // Check prefers-reduced-motion
+      if (!window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+        requestAnimationFrame(draw);
+      }
+    })();
+  </script>
+<!-- JavaScript: Scenario Control & Interactive Telemetry -->
+<script data-purpose="telemetry-interactivity">
+    function triggerSpeedPulse() {
+      const speedElem = document.getElementById('val-net-speed');
+      if (!speedElem) return;
+      speedElem.classList.add('text-teal-400');
+      let count = 0;
+      const interval = setInterval(() => {
+        const rand = (64 + Math.random() * 8).toFixed(2);
+        speedElem.innerHTML = `${rand} <span class="text-base font-normal text-slate-400">Mbps</span>`;
+        count++;
+        if (count > 8) {
+          clearInterval(interval);
+          speedElem.innerHTML = `65.37 <span class="text-base font-normal text-slate-400">Mbps</span>`;
+          speedElem.classList.remove('text-teal-400');
+        }
+      }, 120);
+    }
+
+    function setScenario(type) {
+      const btnNominal = document.getElementById('btn-scen-nominal');
+      const btnSurge = document.getElementById('btn-scen-surge');
+      const btnLoss = document.getElementById('btn-scen-loss');
+
+      const latElem = document.getElementById('val-avg-latency');
+      const lossElem = document.getElementById('val-packet-loss');
+      const speedElem = document.getElementById('val-net-speed');
+
+      // Reset button styles
+      [btnNominal, btnSurge, btnLoss].forEach(b => {
+        if (b) {
+          b.className = 'px-2 py-0.5 rounded text-slate-400 hover:text-slate-200';
+        }
+      });
+
+      if (type === 'nominal') {
+        btnNominal.className = 'px-2 py-0.5 rounded text-teal-400 bg-teal-950/80 border border-teal-500/40 font-semibold';
+        latElem.innerHTML = `26 <span class="text-base font-normal text-slate-400">ms</span>`;
+        lossElem.innerText = '1.5%';
+        speedElem.innerHTML = `65.37 <span class="text-base font-normal text-slate-400">Mbps</span>`;
+      } else if (type === 'surge') {
+        btnSurge.className = 'px-2 py-0.5 rounded text-purple-400 bg-purple-950/80 border border-purple-500/40 font-semibold';
+        latElem.innerHTML = `48 <span class="text-base font-normal text-slate-400">ms</span>`;
+        lossElem.innerText = '0.4%';
+        speedElem.innerHTML = `142.80 <span class="text-base font-normal text-slate-400">Mbps</span>`;
+      } else if (type === 'loss') {
+        btnLoss.className = 'px-2 py-0.5 rounded text-rose-400 bg-rose-950/80 border border-rose-500/40 font-semibold';
+        latElem.innerHTML = `94 <span class="text-base font-normal text-slate-400">ms</span>`;
+        lossElem.innerText = '12.8%';
+        speedElem.innerHTML = `18.24 <span class="text-base font-normal text-slate-400">Mbps</span>`;
+      }
+    }
+  </script>
+
+
+</body></html>

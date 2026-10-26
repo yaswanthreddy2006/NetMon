@@ -1,103 +1,140 @@
 <template>
-  <div class="flex flex-col h-screen px-4 sm:px-6 lg:px-8 py-4 max-w-[1680px] mx-auto overflow-hidden">
+  <div class="min-h-screen px-3 sm:px-6 lg:px-8 py-2 max-w-[1720px] mx-auto flex flex-col gap-4">
 
-    <AppHeader
-      :status="statusBadge"
+    <!-- 1. TOP DYNAMIC FLOATING NAVIGATION BAR (Reference Inspiration) -->
+    <DynamicNavBar
+      :active-section="activeSection"
+      :status="statusBadge.class"
+      :status-label="statusBadge.label"
       :target-count="targetCount"
-      :network-label="networkLabel"
-      :ago-label="agoLabel"
+      :device-count="deviceCount"
+      :live-throughput="liveThroughputBadge"
+      :alert-count="alertCount"
       :is-refreshing="isLoading"
+      :is-speed-testing="isSpeedTesting"
       :is-dark="isDark"
-      :current-minutes="currentMinutes"
-      :conn-type="connType"
       @toggle-theme="$emit('toggle-theme')"
       @open-settings="settingsOpen = true"
+      @refresh-now="loadData(true)"
+      @run-speed-test="runManualSpeedTest"
+      @select-section="onSelectSection"
     >
       <template #duration-picker>
         <DurationPicker v-model="currentMinutes" @change="onDurationChange" />
       </template>
-    </AppHeader>
+    </DynamicNavBar>
 
-    <SettingsModal :open="settingsOpen" @close="settingsOpen = false" @saved="loadData()" />
+    <!-- 2. SECTION: OVERVIEW -->
+    <section id="sec-overview" class="scroll-mt-20">
+      <OverviewSection
+        :summary="summary"
+        :latest-measurement="latestMeasurement"
+        :live-traffic="liveTraffic"
+        :speed-test="latestSpeedTest"
+        :hotspot="hotspot"
+        :diagnosis="diagnosis"
+        :targets="targets"
+        :history="history"
+        :is-online="isOnline"
+      />
+    </section>
 
-    <!-- Scroll wrapper -->
-    <div class="flex-1 min-h-0 overflow-y-auto lg:overflow-hidden">
-      <div class="grid grid-cols-1 lg:grid-cols-[1fr_300px] gap-3 lg:h-full">
+    <!-- 3. SECTION: NETWORK -->
+    <section id="sec-network" class="scroll-mt-20">
+      <NetworkSection
+        :targets="targets"
+        :summary="summary"
+        :live-traffic="liveTraffic"
+        :hotspot="hotspot"
+        :latest-measurement="latestMeasurement"
+        :dns="dns"
+        :history="history"
+        :is-online="isOnline"
+        :now="now"
+        :connection-info="connectionInfo"
+        :local-ip="localIP"
+        :gateway-ip="gatewayIP"
+        :network-id="networkID"
+      />
+    </section>
 
-        <!-- Left column -->
-        <div class="flex flex-col gap-3 lg:min-h-0">
+    <!-- 4. SECTION: DEVICES -->
+    <section id="sec-devices" class="scroll-mt-20">
+      <ConnectedDevicesSection
+        :hotspot="hotspot"
+        :live-traffic="liveTraffic"
+        :targets="targets"
+        :latest-measurement="latestMeasurement"
+        :connection-info="connectionInfo"
+        :local-ip="localIP"
+        :network-id="networkID"
+      />
+    </section>
 
-          <!-- Metric cards -->
-          <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 flex-shrink-0">
-            <MetricCard v-for="(card, i) in metricCards" :key="i" v-bind="card" />
-          </div>
+    <!-- 5. SECTION: TRAFFIC -->
+    <section id="sec-traffic" class="scroll-mt-20">
+      <TrafficSection
+        :live-traffic="liveTraffic"
+        :app-traffic="appTraffic"
+        :speed-test="latestSpeedTest"
+        :summary="summary"
+        :is-speed-testing="isSpeedTesting"
+        :now="now"
+        @run-speed-test="runManualSpeedTest"
+      />
+    </section>
 
-          <!-- Charts 2×2 — :key forces full remount on theme/resize -->
-          <div id="chartGrid" class="grid grid-cols-1 md:grid-cols-2 gap-3 lg:flex-1 lg:min-h-0">
-            <ChartPanel :key="'lat-' + chartKey" :config="chartConfigs.latency" :label="chartLabels.latency" title="Latency"               dot="var(--accent)"  label-id="latencyChart" :icon="CHART_ICONS.latency" />
-            <ChartPanel :key="'spd-' + chartKey" :config="chartConfigs.speed"   :label="chartLabels.speed"   title="Throughput"            dot="var(--green)"   label-id="speedChart"   :icon="CHART_ICONS.speed"   />
-            <ChartPanel :key="'los-' + chartKey" :config="chartConfigs.loss"    :label="chartLabels.loss"    title="Packet Loss &amp; Jitter" dot="var(--red)"  label-id="lossChart"    :icon="CHART_ICONS.loss"    />
-            <ChartPanel :key="'dns-' + chartKey" :config="chartConfigs.dns"     :label="chartLabels.dns"     title="DNS Resolution"        dot="var(--purple)"  label-id="dnsChart"     :icon="CHART_ICONS.dns"    />
-          </div>
-        </div>
+    <!-- 6. SECTION: SECURITY -->
+    <section id="sec-security" class="scroll-mt-20">
+      <SecuritySection
+        :summary="summary"
+        :latest-measurement="latestMeasurement"
+        :live-traffic="liveTraffic"
+        :diagnosis="diagnosis"
+        :targets="targets"
+        :history="history"
+        :now="now"
+      />
+    </section>
 
-        <!-- Right sidebar -->
-        <div class="sidebar-scroll flex flex-col gap-3 lg:min-h-0 lg:overflow-y-auto pb-4 lg:pb-0">
+    <!-- 7. SECTION: ANALYTICS -->
+    <section id="sec-analytics" class="scroll-mt-20">
+      <AnalyticsSection
+        :summary="summary"
+        :history="history"
+        :speed-tests="speedTests"
+        :latest-speed-test="latestSpeedTest"
+        :diagnosis="diagnosis"
+        :chart-key="chartKey"
+        :is-dark="isDark"
+        :current-minutes="currentMinutes"
+        :is-speed-testing="isSpeedTesting"
+      />
+    </section>
 
-          <AccordionCard section="health" padding="p-3">
-            <template #title>
-              <span class="flex items-center gap-1.5">
-                <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
-                Connection Health
-              </span>
-            </template>
-            <HealthRing :summary="summary" />
-          </AccordionCard>
+    <!-- SETTINGS MODAL -->
+    <SettingsModal
+      :open="settingsOpen"
+      @close="settingsOpen = false"
+      @saved="loadData(true)"
+    />
 
-          <AccordionCard section="connectivity" padding="p-3">
-            <template #title>
-              <span class="flex items-center gap-1.5">
-                <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg>
-                Connectivity
-              </span>
-            </template>
-            <ConnectivityTable :targets="targets" />
-          </AccordionCard>
-
-          <AccordionCard section="dns" padding="p-3">
-            <template #title>
-              <span class="flex items-center gap-1.5">
-                <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
-                DNS Lookups
-              </span>
-            </template>
-            <DnsTable :checks="dns" />
-          </AccordionCard>
-
-          <ConnectionCard :history="history" />
-          <QuickStats :summary="summary" :history="history" />
-
-        </div>
-      </div>
-    </div>
   </div>
 </template>
 
 <script setup>
 import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
-import AppHeader         from './AppHeader.vue'
-import DurationPicker    from './DurationPicker.vue'
-import SettingsModal     from './SettingsModal.vue'
-import MetricCard        from './MetricCard.vue'
-import ChartPanel        from './ChartPanel.vue'
-import AccordionCard     from './AccordionCard.vue'
-import HealthRing        from './HealthRing.vue'
-import ConnectivityTable from './ConnectivityTable.vue'
-import DnsTable          from './DnsTable.vue'
-import ConnectionCard    from './ConnectionCard.vue'
-import QuickStats        from './QuickStats.vue'
-import { useToasts }     from '../composables/useToasts.js'
-import { sparklineSVG }  from '../utils/sparkline.js'
+import DynamicNavBar           from './DynamicNavBar.vue'
+import DurationPicker          from './DurationPicker.vue'
+import SettingsModal           from './SettingsModal.vue'
+import OverviewSection         from './OverviewSection.vue'
+import NetworkSection          from './NetworkSection.vue'
+import ConnectedDevicesSection from './ConnectedDevicesSection.vue'
+import TrafficSection          from './TrafficSection.vue'
+import SecuritySection         from './SecuritySection.vue'
+import AnalyticsSection        from './AnalyticsSection.vue'
+import { useToasts }           from '../composables/useToasts.js'
+import { computeAnomalyMetrics } from '../utils/anomaly.js'
 
 const props = defineProps({ isDark: Boolean })
 defineEmits(['toggle-theme'])
@@ -111,77 +148,131 @@ const apiData        = ref(null)
 const apiConfig      = ref(null)
 const currentMinutes = ref(60)
 const isLoading      = ref(false)
+const isSpeedTesting = ref(false)
 const lastUpdateTime = ref(null)
-const prevSummary    = ref(null)
 const prevStatus     = ref(null)
 const chartKey       = ref(0)
 const settingsOpen   = ref(false)
-const agoLabel       = ref('—')
+const now            = ref(Date.now())
+const activeSection  = ref('overview')
 
 // Recreate charts when theme changes
 watch(() => props.isDark, () => { chartKey.value++ })
 
-// ── "X ago" ticker ──────────────────────────────────────────────────────
-const agoTimer = setInterval(() => {
-  if (!lastUpdateTime.value) return
-  const sec = Math.floor((Date.now() - lastUpdateTime.value) / 1000)
-  if      (sec < 5)    agoLabel.value = 'just now'
-  else if (sec < 60)   agoLabel.value = sec + 's ago'
-  else if (sec < 3600) agoLabel.value = Math.floor(sec / 60) + 'm ago'
-  else                 agoLabel.value = Math.floor(sec / 3600) + 'h ago'
+// ── Ticker ──────────────────────────────────────────────────────────────
+const ticker = setInterval(() => {
+  now.value = Date.now()
 }, 1000)
 
-// ── Data loading ─────────────────────────────────────────────────────────
+// ── Scroll Spy (IntersectionObserver) ───────────────────────────────────
+let observer = null
+
+function initScrollSpy() {
+  const sections = ['overview', 'network', 'devices', 'traffic', 'security', 'analytics']
+  const options = {
+    root: null,
+    rootMargin: '-20% 0px -70% 0px',
+    threshold: 0
+  }
+
+  observer = new IntersectionObserver((entries) => {
+    entries.forEach(entry => {
+      if (entry.isIntersecting) {
+        const id = entry.target.id.replace('sec-', '')
+        activeSection.value = id
+      }
+    })
+  }, options)
+
+  sections.forEach(s => {
+    const el = document.getElementById(`sec-${s}`)
+    if (el) observer.observe(el)
+  })
+}
+
+function onSelectSection(id) {
+  activeSection.value = id
+}
+
+// ── Data loading ────────────────────────────────────────────────────────
+let activeRequestId = 0
+
 async function loadData(forceRecreate = false) {
-  if (isLoading.value) return
+  const reqId = ++activeRequestId
   isLoading.value = true
   try {
     const [d, cfg] = await Promise.all([
       fetch(`/api/data?minutes=${currentMinutes.value}`).then(r => r.json()),
       fetch('/api/config').then(r => r.json()),
     ])
-    lastUpdateTime.value = Date.now()
-    checkThresholds(d.summary, prevSummary.value)
+    if (reqId !== activeRequestId) return
 
     if (cfg) {
       const allowedPing = new Set(cfg.ping_targets.map(h => h.toLowerCase()))
-      d.targets = (d.targets || []).filter(t => allowedPing.has(t.host.toLowerCase()))
+      d.targets = (d.targets || []).filter(t => t.host.toLowerCase() === 'gateway' || allowedPing.has(t.host.toLowerCase()))
       const allowedDns = new Set(cfg.dns_targets.map(h => h.toLowerCase()))
       d.dns = (d.dns || []).filter(x => allowedDns.has(x.host.toLowerCase()))
     }
 
-    prevSummary.value = d.summary
-    apiData.value     = d
-    apiConfig.value   = cfg
+    apiData.value        = d
+    apiConfig.value      = cfg
+    lastUpdateTime.value = Date.now()
+    checkThresholds(statusBadge.value)
     if (forceRecreate) chartKey.value++
-  } catch (_) { /* keep stale data on error */ }
-  isLoading.value = false
+  } catch (_) { /* maintain previous state on network error */ }
+  if (reqId === activeRequestId) {
+    isLoading.value = false
+  }
 }
 
-function checkThresholds(s, prev) {
-  const curr = s.packet_loss > 5 ? 'offline' : s.packet_loss > 1 ? 'degraded' : 'online'
+async function runManualSpeedTest() {
+  if (isSpeedTesting.value) return
+  isSpeedTesting.value = true
+  showToast('st-start', 'Bandwidth Test Initiated', 'Running download & upload throughput benchmark…', 'info', 4000)
+  try {
+    const res = await fetch('/api/speedtest/run', { method: 'POST' })
+    const data = await res.json()
+    if (!res.ok) {
+      showToast('st-fail', 'Speed Test Failed', data.error || 'Test failed', 'error', 6000)
+    } else {
+      const st = data.speed_test
+      showToast('st-done', 'Speed Test Complete', `↓ ${st.download_mbps} Mbps · ↑ ${st.upload_mbps} Mbps`, 'ok', 5000)
+    }
+    await loadData(true)
+  } catch (err) {
+    showToast('st-err', 'Speed Test Error', err.message || 'Request failed', 'error', 6000)
+  } finally {
+    isSpeedTesting.value = false
+  }
+}
+
+function checkThresholds(currentStatusBadge) {
+  const curr = currentStatusBadge?.class || 'online'
   if (prevStatus.value !== null && prevStatus.value !== curr) {
-    if      (curr === 'offline')  showToast('st-offline',  'Connection Offline',  `Packet loss at ${s.packet_loss}%`, 'error', 8000)
-    else if (curr === 'degraded') showToast('st-degraded', 'Connection Degraded', `Packet loss at ${s.packet_loss}%`, 'warn',  7000)
-    else                          showToast('st-ok',       'Connection Restored', 'All metrics back to normal',       'ok',    5000)
+    if (curr === 'offline') {
+      showToast('st-offline', 'Connection Offline', 'Internet reachability lost or backend service paused', 'error', 8000)
+    } else if (curr === 'online') {
+      showToast('st-ok', 'Connection Online', 'Internet connectivity verified active', 'ok', 5000)
+    }
   }
   prevStatus.value = curr
-  if (prev && s.latency_avg > 150 && prev.latency_avg <= 150)
-    showToast('lat-spike', 'Latency Spike', `${s.latency_avg}ms avg (was ${prev.latency_avg}ms)`, 'warn', 6000)
 }
 
-// ── Polling & resize ──────────────────────────────────────────────────────
+// ── Polling & Lifecycle ──────────────────────────────────────────────────
 let pollTimer = null, resizeTimer = null
 
 onMounted(() => {
   loadData()
   pollTimer = setInterval(loadData, REFRESH_MS)
   window.addEventListener('resize', onResize)
+  setTimeout(initScrollSpy, 300)
 })
+
 onUnmounted(() => {
   clearInterval(pollTimer)
-  clearInterval(agoTimer)
+  clearInterval(ticker)
   window.removeEventListener('resize', onResize)
+  if (observer) observer.disconnect()
 })
 
 function onResize() {
@@ -194,127 +285,95 @@ function onDurationChange(minutes) {
   loadData(true)
 }
 
-// ── Computed: header ──────────────────────────────────────────────────────
-const summary     = computed(() => apiData.value?.summary)
-const history     = computed(() => apiData.value?.history || [])
-const targets     = computed(() => apiData.value?.targets || [])
-const dns         = computed(() => apiData.value?.dns || [])
-const networkId   = computed(() => apiData.value?.network_id || 'unknown')
-const targetCount = computed(() => apiConfig.value ? apiConfig.value.ping_targets.length : targets.value.length)
-const networkLabel = computed(() => {
-  const id = networkId.value.replace(/^gw:/, 'Gateway: ')
-  const interval = apiConfig.value ? ` · Ping every ${apiConfig.value.ping_interval_s}s` : ''
-  return id + interval
+// ── Computed Data ─────────────────────────────────────────────────────────
+const summary           = computed(() => apiData.value?.summary)
+const history           = computed(() => apiData.value?.history || [])
+const targets           = computed(() => apiData.value?.targets || [])
+const dns               = computed(() => apiData.value?.dns || [])
+const diagnosis         = computed(() => apiData.value?.diagnosis || null)
+const speedTests        = computed(() => apiData.value?.speed_tests || [])
+const liveTraffic       = computed(() => apiData.value?.live_traffic || null)
+const appTraffic        = computed(() => apiData.value?.application_traffic || null)
+const hotspot           = computed(() => apiData.value?.hotspot || null)
+const latestMeasurement = computed(() => apiData.value?.latest_measurement || (history.value.length ? history.value[history.value.length - 1] : null))
+const latestSpeedTest   = computed(() => apiData.value?.speed_test || (speedTests.value.length ? speedTests.value[speedTests.value.length - 1] : null))
+const targetCount       = computed(() => apiConfig.value ? apiConfig.value.ping_targets.length : targets.value.length)
+const connectionInfo    = computed(() => apiData.value?.connection_info || null)
+const localIP           = computed(() => apiData.value?.local_ip || '')
+const gatewayIP         = computed(() => apiData.value?.gateway_ip || '')
+const networkID         = computed(() => apiData.value?.network_id || '')
+
+const isOnline = computed(() => {
+  return statusBadge.value.class === 'online'
 })
+
 const statusBadge = computed(() => {
-  const loss = summary.value?.packet_loss ?? 0
-  return loss > 5 ? 'offline' : loss > 1 ? 'degraded' : 'online'
-})
-const connType = computed(() => {
-  const latest = history.value[history.value.length - 1]
-  return latest?.conn_type ?? ''
-})
-
-// ── Computed: metric cards ────────────────────────────────────────────────
-const SVG = (d) => `<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${d}</svg>`
-const CHART_ICONS = {
-  latency: SVG('<circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>'),
-  speed:   SVG('<polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>'),
-  loss:    SVG('<polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>'),
-  dns:     SVG('<rect x="2" y="2" width="20" height="8" rx="2" ry="2"/><rect x="2" y="14" width="20" height="8" rx="2" ry="2"/><line x1="6" y1="6" x2="6.01" y2="6"/><line x1="6" y1="18" x2="6.01" y2="18"/>'),
-}
-
-const ICONS = {
-  clock:     `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>`,
-  arrowDown: `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><polyline points="19 12 12 19 5 12"/></svg>`,
-  arrowUp:   `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="19" x2="12" y2="5"/><polyline points="5 12 12 5 19 12"/></svg>`,
-  activity:  `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>`,
-}
-
-const metricCards = computed(() => {
-  if (!summary.value) return [
-    { label: 'Avg Latency', value: '—', icon: ICONS.clock,     color: 'blue',   sub: 'waiting for data', spark: null },
-    { label: 'Download',    value: '—', icon: ICONS.arrowDown, color: 'green',  sub: 'waiting for data', spark: null },
-    { label: 'Upload',      value: '—', icon: ICONS.arrowUp,   color: 'purple', sub: 'waiting for data', spark: null },
-    { label: 'Packet Loss', value: '—', icon: ICONS.activity,  color: 'yellow', sub: 'waiting for data', spark: null },
-  ]
-  const s  = summary.value
-  const l20 = history.value.slice(-20)
-  const lc  = s.packet_loss > 1 ? 'red' : 'yellow'
-  const C   = { blue: '#3b82f6', green: '#10b981', purple: '#8b5cf6', red: '#ef4444', yellow: '#f59e0b' }
-  return [
-    { label: 'Avg Latency', value: s.latency_avg  + ' ms',   icon: ICONS.clock,     color: 'blue',   sub: 'p95 ' + s.latency_p95 + ' ms',            spark: sparklineSVG(l20.map(h => h.latency),  C.blue)   },
-    { label: 'Download',    value: s.download_avg + ' Mbps', icon: ICONS.arrowDown, color: 'green',  sub: 'avg throughput',                           spark: sparklineSVG(l20.map(h => h.download), C.green)  },
-    { label: 'Upload',      value: s.upload_avg   + ' Mbps', icon: ICONS.arrowUp,   color: 'purple', sub: 'avg throughput',                           spark: sparklineSVG(l20.map(h => h.upload),   C.purple) },
-    { label: 'Packet Loss', value: s.packet_loss  + '%',     icon: ICONS.activity,  color: lc,       sub: s.packet_loss < 1 ? 'healthy' : 'elevated', spark: sparklineSVG(l20.map(h => h.loss),     C[lc])    },
-  ]
-})
-
-// ── Computed: charts ──────────────────────────────────────────────────────
-function getChartHeight(hasData) {
-  if (window.innerWidth >= 1024) {
-    if (!hasData) return '100%'
-    const grid = document.getElementById('chartGrid')
-    if (grid && grid.offsetHeight > 0)
-      return Math.max(80, Math.floor((grid.offsetHeight - 12) / 2) - 52)
-    return '100%'
+  if (!apiData.value || !lastUpdateTime.value) {
+    return { class: 'offline', label: 'Connecting…' }
   }
-  return window.innerWidth < 640 ? 160 : 185
-}
-
-const chartConfigs = computed(() => {
-  const h      = history.value
-  const times  = h.map(x => x.time)
-  const isSmall = window.innerWidth < 640
-  const chartH  = getChartHeight(h.length > 0)
-  const tick    = Math.min(times.length, isSmall ? 4 : 6)
-  const ls      = { colors: 'var(--muted)', fontSize: isSmall ? '9px' : '10px' }
-  const dark    = props.isDark
-
-  const noData = {
-    text: 'Waiting for data…',
-    align: 'center', verticalAlign: 'middle',
-    style: { color: dark ? '#7b8ba4' : '#9ca3af', fontSize: '12px', fontFamily: "'Inter',sans-serif" },
+  const timeSinceLastUpdate = now.value - lastUpdateTime.value
+  const staleThreshold = Math.max(REFRESH_MS * 3, 45000)
+  if (timeSinceLastUpdate > staleThreshold) {
+    return { class: 'offline', label: 'Offline' }
   }
 
-  const base = {
-    chart: { type: 'area', background: 'transparent', fontFamily: "'Inter',sans-serif", toolbar: { show: false }, height: chartH, animations: { speed: 500 }, zoom: { enabled: false } },
-    stroke: { curve: 'smooth', width: 2 },
-    markers: { size: times.length > 0 && times.length <= 5 ? 4 : 0, hover: { size: 5 } },
-    grid: { borderColor: 'var(--border)', strokeDashArray: 4, xaxis: { lines: { show: false } }, yaxis: { lines: { show: true } }, padding: { top: -8, right: 0, bottom: 0, left: 13.5 } },
-    xaxis: { categories: times, tickAmount: tick, labels: { style: ls, rotate: 0, hideOverlappingLabels: true, maxHeight: 30 }, axisBorder: { show: true, color: 'var(--border)' }, axisTicks: { show: false } },
-    yaxis: { labels: { style: ls }, forceNiceScale: true, axisBorder: { show: true, color: 'var(--border)' }, axisTicks: { show: false } },
-    legend: { position: 'top', fontSize: '10px', labels: { colors: 'var(--subtle)' }, markers: { width: 6, height: 6, radius: 2 }, itemMargin: { horizontal: 8 } },
-    tooltip: { theme: dark ? 'dark' : 'light', style: { fontSize: '11px' }, x: { show: true } },
-    dataLabels: { enabled: false },
-    noData,
-  }
-  const fill = (o = 0.12) => ({ type: 'gradient', gradient: { shadeIntensity: 0, opacityFrom: o, opacityTo: 0.01, stops: [0, 95] } })
+  const tList = targets.value || []
+  const remoteTargets = tList.filter(t => t.host.toLowerCase() !== 'gateway')
 
-  return {
-    latency: { ...base, series: [{ name: 'Latency (ms)', data: h.map(x => x.latency) }], colors: ['#3b82f6'], fill: fill(), yaxis: { ...base.yaxis, min: 0 } },
-    speed:   { ...base, series: [{ name: 'Download', data: h.map(x => x.download || null) }, { name: 'Upload', data: h.map(x => x.upload || null) }], colors: ['#10b981', '#8b5cf6'], fill: fill(0.08) },
-    loss: {
-      ...base,
-      series: [{ name: 'Loss (%)', data: h.map(x => x.loss) }, { name: 'Jitter (ms)', data: h.map(x => x.jitter) }],
-      colors: ['#ef4444', '#f59e0b'], fill: fill(0.1),
-      yaxis: [
-        { forceNiceScale: true, min: 0, axisBorder: { show: true, color: 'var(--border)' }, axisTicks: { show: false }, title: { text: 'Loss %',   style: { fontSize: '10px', color: 'var(--muted)' } }, labels: { style: { colors: 'var(--muted)', fontSize: '10px' } } },
-        { opposite: true, forceNiceScale: true, min: 0, axisBorder: { show: false }, axisTicks: { show: false }, title: { text: 'Jitter ms', style: { fontSize: '10px', color: 'var(--muted)' } }, labels: { style: { colors: 'var(--muted)', fontSize: '10px' } } },
-      ],
-    },
-    dns: { ...base, series: [{ name: 'DNS (ms)', data: h.map(x => x.dns || null) }], colors: ['#8b5cf6'], fill: fill(), yaxis: { ...base.yaxis, min: 0 } },
+  if (remoteTargets.length > 0) {
+    const hasActiveRemoteProbe = remoteTargets.some(t => t.status === 'up' && t.loss < 100)
+    if (!hasActiveRemoteProbe) {
+      return { class: 'offline', label: 'Offline' }
+    }
+    return { class: 'online', label: 'Online' }
   }
+
+  const lm = latestMeasurement.value
+  if (lm && lm.loss >= 100) {
+    return { class: 'offline', label: 'Offline' }
+  }
+
+  return { class: 'online', label: 'Online' }
 })
 
-const chartLabels = computed(() => {
-  if (!summary.value) return { latency: '—', speed: '—', loss: '—', dns: '—' }
+const deviceCount = computed(() => {
+  if (hotspot.value?.active) {
+    return (hotspot.value.client_count || hotspot.value.clients?.length || 0) + 1
+  }
+  return 1
+})
+
+const liveThroughputBadge = computed(() => {
+  const rx = liveTraffic.value?.rx_mbps || 0
+  const tx = liveTraffic.value?.tx_mbps || 0
+  if (rx + tx > 0.05) {
+    return `↓ ${rx.toFixed(1)}M · ↑ ${tx.toFixed(1)}M`
+  }
+  return null
+})
+
+const alertCount = computed(() => {
   const s = summary.value
-  return {
-    latency: s.latency_avg + ' ms',
-    speed:   '↓ ' + s.download_avg + '  ↑ ' + s.upload_avg + ' Mbps',
-    loss:    s.packet_loss + '% · ' + s.jitter_avg + ' ms',
-    dns:     s.dns_avg + ' ms',
-  }
+  const lm = latestMeasurement.value
+  let count = 0
+  const loss = s?.packet_loss ?? lm?.loss ?? 0
+  if (loss > 1.0) count++
+  const lat = s?.latency_avg ?? lm?.latency ?? 0
+  if (lat > 80.0) count++
+  const anomaly = computeAnomalyMetrics({
+    summary: s,
+    latestMeasurement: lm,
+    liveTraffic: liveTraffic.value,
+    diagnosis: diagnosis.value,
+    history: history.value,
+  })
+  if (anomaly.status === 'SUSPICIOUS') count++
+  return count
 })
 </script>
+
+<style scoped>
+.scroll-mt-20 {
+  scroll-margin-top: 5rem;
+}
+</style>
